@@ -1,0 +1,1546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080f1d">
+<title>EchoScope | Acoustic 3D Scanner MVP · v1.4</title>
+<style>
+:root{color-scheme:dark;--bg:#080f1d;--panel:#101d30;--panel2:#0c1929;--line:#23364c;--muted:#91a6bf;--text:#eaf5ff;--accent:#38e2cc;--blue:#55a8ff;--amber:#f4bd70;--red:#fc7d8d}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),var(--bg)}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.shell{max-width:1320px;margin:0 auto;padding:calc(22px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left))}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}.brand{display:flex;align-items:center;gap:12px}.logo{width:44px;height:44px;display:grid;place-items:center;border-radius:13px;border:1px solid #286876;background:#0e3744;color:#83ffe9;font-size:24px;box-shadow:inset 0 0 20px #1c696733}.brand strong{font-size:23px;letter-spacing:.6px}.brand small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.9px}.tag{border:1px solid #2f5065;background:#102638;color:#8fd2ef;padding:6px 10px;border-radius:100px;font-size:11px;letter-spacing:1px;text-transform:uppercase}
+.layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(300px,.95fr);gap:16px}.card{border:1px solid var(--line);background:linear-gradient(160deg,#102033ed,#0b1727f5);border-radius:16px;overflow:hidden;box-shadow:0 12px 40px #0002}.scan-card{min-width:0;align-self:start}.section-header{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;gap:10px;border-bottom:1px solid var(--line)}.section-title{font-size:12px;font-weight:750;letter-spacing:1.4px;text-transform:uppercase;color:#c7e2f5}.eyebrow{font-size:10px;color:#7d9db5;letter-spacing:1.2px;text-transform:uppercase}.status{display:inline-flex;align-items:center;gap:8px;color:#91a6bf;font-size:11px;font-weight:700;letter-spacing:.65px;white-space:nowrap}.dot{width:7px;height:7px;border-radius:50%;background:#6b8298;box-shadow:0 0 8px #6b829865}.status.live .dot{background:var(--accent);box-shadow:0 0 10px var(--accent)}.status.demo .dot{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+.viewport{position:relative;height:min(60vh,550px);min-height:350px;background:radial-gradient(ellipse at 50% 48%,#10263b 0%,#091626 65%,#071321 100%);overflow:hidden;touch-action:none}.viewport canvas{width:100%;height:100%;display:block;touch-action:none}.viewport .hud{pointer-events:none;position:absolute;top:15px;left:17px;display:grid;gap:5px}.hud .line{font:11px ui-monospace,Consolas,monospace;color:#6fabc4;letter-spacing:.5px}.hud .line.dim{color:#4f7d93}.reticle{position:absolute;pointer-events:none;top:50%;left:50%;width:22px;height:22px;transform:translate(-50%,-50%);border:1px solid #75dbef32;border-radius:100%}.reticle:after{content:"";position:absolute;width:4px;height:4px;border-radius:100%;left:8px;top:8px;background:#53ebdb5c}.corner{position:absolute;pointer-events:none;bottom:12px;right:15px;color:#7290a7;font:10px ui-monospace,monospace;letter-spacing:.7px}.scan-foot{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line)}.small-button{background:#132a40;color:#c9e8f4;border:1px solid #30516a;border-radius:9px;padding:8px 12px;font-weight:700;font-size:12px}.small-button:hover{background:#1a3953}.small-button:disabled{opacity:.45;cursor:not-allowed}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.hint{font-size:11px;color:var(--muted)}
+.side{display:flex;flex-direction:column;gap:16px;min-width:0}.controls{padding:17px}.primary{width:100%;padding:14px;border:none;border-radius:10px;background:linear-gradient(120deg,#3ce5c5,#24c6db);color:#062533;font-weight:850;font-size:15px;letter-spacing:.3px;box-shadow:0 5px 20px #32dbc32c}.primary.running{background:linear-gradient(120deg,#f08991,#f7bd7c);color:#3a1c20}.primary:disabled{cursor:wait;opacity:.6}.switchline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:15px;padding:7px 0}.switchline label{font-weight:650;color:#e0f1fc}.switchline small{display:block;color:var(--muted);font-weight:400;font-size:11px}.toggle{appearance:none;flex:none;width:44px;height:25px;background:#30455b;border:1px solid #465b70;border-radius:100px;position:relative;cursor:pointer;transition:.2s}.toggle:after{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:#a2b7ca;transition:transform .2s}.toggle:checked{background:#145c65;border-color:#3be4d5}.toggle:checked:after{transform:translateX(19px);background:#82ffed}.toggle:disabled{opacity:.5;cursor:not-allowed}.rule{border:none;border-top:1px solid var(--line);margin:16px 0}.range-row{margin-top:13px}.range-head{display:flex;justify-content:space-between;align-items:center;color:#cbddec;font-size:12px;font-weight:700}.range-head output{font:12px ui-monospace,monospace;color:var(--accent)}input[type=range]{width:100%;margin:10px 0 2px;accent-color:#38d9c9}input[type=range]:disabled{opacity:.45}.range-row small{color:var(--muted);font-size:10px}.message{margin-top:12px;font-size:12px;line-height:1.55;color:#a6c0d5;background:#0a1b2b;border:1px solid #1e4256;border-radius:9px;padding:10px 12px}.message.error{border-color:#905066;color:#ffc0c8;background:#2a1924}.message.warn{border-color:#806044;color:#f2d5ae;background:#302518}
+.select{width:100%;margin-top:8px;padding:8px 10px;border-radius:9px;border:1px solid #30516a;background:#0d2236;color:#dff2fb;font-size:12px;font-weight:600}.select:disabled{opacity:.5}
+.adv{margin-top:15px;border:1px solid var(--line);border-radius:10px;background:#0a1b2b}.adv summary{cursor:pointer;padding:10px 12px;font-weight:700;font-size:12px;color:#cbddec;list-style:none;display:flex;justify-content:space-between;align-items:center}.adv summary::-webkit-details-marker{display:none}.adv summary:after{content:"＋";color:var(--accent)}.adv[open] summary:after{content:"－"}.adv[open] summary{border-bottom:1px solid var(--line)}.adv-body{padding:2px 12px 12px}
+.baseline{margin-top:14px;padding:11px 12px;border:1px solid #24506a;border-radius:10px;background:#0a1c2f}.baseline .head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;font-size:12px;font-weight:700;color:#cbddec}.baseline small{display:block;color:#89a6bf;margin-top:4px;font-size:11px;font-weight:400}.baseline .row{display:flex;gap:8px;margin-top:9px}.baseline .row .small-button{flex:1}.base-state{font:11px ui-monospace,Consolas,monospace;color:var(--muted)}.base-state.on{color:var(--accent)}.base-state.busy{color:var(--amber)}
+.telemetry{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line)}.metric{padding:15px 12px;background:#0f2032;min-width:0}.metric label{display:block;font-size:10px;color:#8ca8be;text-transform:uppercase;letter-spacing:.85px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric b{display:block;margin-top:5px;min-height:25px;font:700 clamp(14px,1.6vw,20px)/1.4 ui-monospace,Consolas,monospace;color:#e6f5fa;white-space:nowrap}.metric b.primary-num{color:var(--accent)}.metric em{display:block;font-size:10px;color:#7292a7;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.statusline{display:flex;justify-content:space-between;gap:10px;padding:10px 15px;border-top:1px solid var(--line);font:12px ui-monospace,Consolas,monospace;color:#98bad2}.statusline strong{color:#e5f6fd}.angles{padding:12px 15px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font:12px ui-monospace,monospace;color:#98bad2;border-top:1px solid var(--line)}.angles strong{color:#e5f6fd}
+.corr{padding:12px 15px 15px}.corr canvas{height:150px;width:100%;display:block;border:1px solid #1b3447;border-radius:7px;background:#081b2a}.corr-note{display:flex;justify-content:space-between;gap:8px;margin-top:6px;color:#7896ad;font-size:10px;flex-wrap:wrap}.legend i{display:inline-block;width:14px;height:0;vertical-align:middle;margin:0 4px 0 8px;border-top:2px solid #39e2d0}.legend i.thr{border-top:1px dashed #f4bd70}.legend i.min{height:8px;border:none;background:#ffffff14}.explain{margin-top:16px;background:#0b1829;border:1px solid #1d384e;border-radius:12px;padding:13px 16px;color:#b8cfe0;font-size:12px}.explain strong{color:#e4f5ff}.explain p{margin:6px 0 0}.explain code{color:#80ebd9}.footer{margin-top:12px;font-size:11px;color:#7793aa}.code{font:11px ui-monospace,Consolas,monospace}
+@media(max-width:960px){.layout{grid-template-columns:1fr}.side{display:grid;grid-template-columns:1fr 1fr;align-items:start}.viewport{height:50vh}.telemetry{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.shell{padding:12px 10px 30px}.brand strong{font-size:20px}.tag{font-size:9px}.side{display:flex}.viewport{height:43vh;min-height:290px}.metric b{font-size:17px}.scan-foot .hint{width:100%}.section-header{padding:12px 13px}.controls{padding:14px}.angles{font-size:11px}}
+.quick-demo{margin-top:10px;width:100%;padding:10px 12px;background:#143449;border:1px solid #338d99;border-radius:9px;color:#87fbea;font-weight:750;font-size:12px;letter-spacing:.3px}
+.quick-demo:hover{background:#20536b}.quick-demo:disabled{opacity:.45}
+.manual-panel{margin-top:9px;padding:11px 12px;background:#0a1c2f;border:1px solid #24506a;border-radius:10px}
+.manual-panel[hidden]{display:none}.manual-panel .range-row{margin-top:6px}.manual-panel small{display:block;color:#89a6bf;margin-top:7px;font-size:11px}
+.diagnostic{padding:12px 16px;font-size:11px;color:#a2c4d7;line-height:1.55;border-top:1px solid var(--line);background:#0a1b2b}
+.diagnostic strong{color:#a9fae9}.diagnostic code{color:#ffd29b}
+.mobile-bar{display:none;position:absolute;left:10px;right:10px;bottom:10px;gap:8px}
+.mb-btn{flex:1;padding:11px 8px;border-radius:10px;border:1px solid #30516a;background:#132a40e6;color:#c9e8f4;font-weight:800;font-size:13px;-webkit-tap-highlight-color:transparent}
+.mb-btn.mb-start{flex:1.6;border:none;background:linear-gradient(120deg,#3ce5c5,#24c6db);color:#062533}.mb-btn.mb-start.running{background:linear-gradient(120deg,#f08991,#f7bd7c);color:#3a1c20}
+@media(max-width:620px){.mobile-bar{display:flex}.viewport .corner{display:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+ <header class="top"><div class="brand"><div class="logo">◉</div><div><strong>ECHO<span style="color:var(--accent)">SCOPE</span></strong><small>Acoustic 3D scanner · research MVP</small></div></div><span class="tag">LFM CHIRP / CFAR / IMU / STEREO · v1.4</span></header>
+ <main class="layout">
+  <section class="card scan-card" aria-label="3D point cloud viewer">
+   <div class="section-header"><span class="section-title">Spatial reconstruction <span style="color:#698ba5;font-weight:500">/ point cloud</span></span><span class="status" id="status"><i class="dot"></i><span id="statusText">STANDBY</span></span></div>
+   <div class="viewport" id="viewport"><canvas id="scene" aria-label="3D plotted acoustic echoes"></canvas><div class="hud"><span class="line" id="hudMode">SOURCE: INACTIVE</span><span class="line" id="hudSamples">POINTS: 0 / 4000</span><span class="line" id="hudOrientation">ORIENTATION: WAITING</span><span class="line" id="hudEcho">ECHO: —</span><span class="line dim" id="hudPerf">DSP — · DRAW —</span></div><div class="reticle"></div><div class="corner">DRAG TO ORBIT · PINCH/SCROLL TO ZOOM</div><div class="mobile-bar" id="mobileBar"><button class="mb-btn mb-start" id="mStart" type="button">▶ Start</button><button class="mb-btn" id="mClear" type="button">Clear</button><button class="mb-btn" id="mZero" type="button">Zero</button></div></div>
+   <div class="scan-foot"><div class="toolbar"><button class="small-button" id="clearBtn">Clear cloud</button><button class="small-button" id="zeroBtn">Zero orientation</button><button class="small-button" id="exportBtn">Export .PLY</button></div><span class="hint" id="cloudHint">No measured points yet</span></div>
+  </section>
+  <div class="side">
+   <section class="card"><div class="section-header"><span class="section-title">Acquisition controls</span><span class="eyebrow">Rev 1.4</span></div><div class="controls">
+    <button class="primary" id="startBtn">▶ Start scan</button>
+    <button class="quick-demo" id="quickDemo" type="button">✦ Run 3D demo (no microphone needed)</button>
+    <div class="switchline"><label for="demo">Simulation mode<small>Synthetic room through the real DSP pipeline</small></label><input class="toggle" type="checkbox" id="demo"></div>
+    <div class="range-row"><div class="range-head"><label for="aimMode">Direction source</label></div>
+     <select class="select" id="aimMode"><option value="sensors" selected>Phone motion sensors — sweep the phone (3D)</option><option value="stereo">Laptop stereo speakers — stationary 2D map</option><option value="manual">Manual yaw/pitch — assumed direction (one line)</option></select>
+     <small id="aimHint"></small></div>
+    <div class="manual-panel" id="sensorsPanel" hidden>
+      <div class="range-row" style="margin-top:2px"><div class="range-head"><label for="axis">Beam axis — where the sound leaves the phone</label></div>
+       <select class="select" id="axis"><option value="back" selected>Back of phone — aim like a camera</option><option value="bottom">Bottom edge — loudspeaker grille, aim like a remote</option><option value="screen">Screen side — earpiece (iPhone with mic on)</option></select>
+       <small>iPhone Safari moves sound to the earpiece while the mic is open, so “Screen side” is the default there. Unsure? Use the 1–4 kHz band and listen.</small></div>
+    </div>
+    <div class="manual-panel" id="manualPanel" hidden>
+      <div class="range-row"><div class="range-head"><label for="aimYaw">Virtual yaw</label><output id="aimYawVal">0°</output></div><input type="range" min="-75" max="75" step="1" value="0" id="aimYaw"></div>
+      <div class="range-row"><div class="range-head"><label for="aimPitch">Virtual pitch</label><output id="aimPitchVal">0°</output></div><input type="range" min="-45" max="45" step="1" value="0" id="aimPitch"></div>
+      <small>Assumed beam direction, not measured. Only meaningful while you physically turn the device to match.</small>
+    </div>
+    <div class="manual-panel" id="stereoPanel" hidden>
+      <div class="range-row"><div class="range-head"><label for="spkSpacing">Speaker spacing</label><output id="spkSpacingVal">28 cm</output></div><input type="range" min="12" max="45" step="1" value="28" id="spkSpacing"><small>Centre of left grille to centre of right grille. Set before starting.</small></div>
+      <div class="range-row"><div class="range-head"><label for="elev">Plot elevation</label><output id="elevVal">0°</output></div><input type="range" min="-45" max="45" step="1" value="0" id="elev"><small>Tilt of the plane points are drawn on (up/down cannot be measured)</small></div>
+      <small>Mic position: <span class="code" id="micOffset">learned at start</span>. Left speaker sends up-chirps, right speaker down-chirps, alternately; the difference in echo path lengths gives left–right position.</small>
+    </div>
+    <hr class="rule">
+    <div class="range-row"><div class="range-head"><label for="band">Chirp band</label></div>
+     <select class="select" id="band"><option value="ultra" selected>18–22 kHz · ultrasonic (near-silent)</option><option value="near">15–20 kHz · near-ultrasonic (more hardware)</option><option value="audible">1–4 kHz · audible debug (most reliable)</option></select>
+     <small>If the chirp never locks, your speaker or mic cannot reach the band — step down.</small></div>
+    <div class="range-row"><div class="range-head"><label for="duration">Chirp duration</label><output id="durationVal">50 ms</output></div><input type="range" min="20" max="80" step="5" value="50" id="duration"><small>Linear FM sweep · longer = more processing gain</small></div>
+    <div class="range-row"><div class="range-head"><label for="period">Repeat interval</label><output id="periodVal">100 ms</output></div><input type="range" min="90" max="200" step="10" value="100" id="period"><small>One range profile per chirp</small></div>
+    <div class="range-row"><div class="range-head"><label for="volume">Speaker gain</label><output id="volumeVal">12%</output></div><input type="range" min="0" max="30" step="1" value="12" id="volume"><small>Begin low. Avoid earphones and high levels.</small></div>
+    <details class="adv"><summary>Detection &amp; geometry</summary><div class="adv-body">
+     <div class="range-row"><div class="range-head"><label for="threshold">Detection threshold</label><output id="thresholdVal">10 dB</output></div><input type="range" min="6" max="20" step="1" value="10" id="threshold"><small>Echo must exceed the local (median CFAR) floor by this much</small></div>
+     <div class="range-row"><div class="range-head"><label for="average">Averaging</label><output id="averageVal">2 chirps</output></div><input type="range" min="1" max="6" step="1" value="2" id="average"><small>Combines chirps only while the aim stays within 1.5°, so sweeps are never smeared</small></div>
+     <div class="range-row"><div class="range-head"><label for="minRange">Minimum range</label><output id="minRangeVal">0.30 m</output></div><input type="range" min="0.15" max="1" step="0.05" value="0.3" id="minRange"><small>Ignores the direct-path tail and hand/phone self-echoes</small></div>
+     <div class="range-row"><div class="range-head"><label for="maxRange">Maximum range</label><output id="maxRangeVal">4.5 m</output></div><input type="range" min="1.5" max="6" step="0.5" value="4.5" id="maxRange"><small>Set before starting</small></div>
+     <div class="range-row"><div class="range-head"><label for="spacing">Speaker–mic spacing</label><output id="spacingVal">5 cm</output></div><input type="range" min="0" max="30" step="1" value="5" id="spacing"><small>Direct path length; added back to every range</small></div>
+     <div class="range-row"><div class="range-head"><label for="temp">Air temperature</label><output id="tempVal">20 °C</output></div><input type="range" min="0" max="40" step="1" value="20" id="temp"><small>Sets the speed of sound (343 m/s at 20 °C)</small></div>
+    </div></details>
+    <div class="baseline"><div class="head"><span>Clutter baseline</span><span class="base-state" id="baseState">Off</span></div>
+     <small id="baseHelp">Learns what stays fixed relative to the phone — direct-path tail, phone body, your hand and torso — and subtracts it. Capture while sweeping slowly.</small>
+     <div class="row"><button class="small-button" id="baseBtn" type="button">Capture baseline</button><button class="small-button" id="baseClear" type="button">Clear</button></div></div>
+    <div class="message" id="message" role="status" aria-live="polite">Pick a direction source, then run the <strong>3D demo</strong> to see it on a synthetic room, or start a live scan (HTTPS, localhost or a local file).</div>
+   </div></section>
+   <section class="card"><div class="section-header"><span class="section-title">Live telemetry</span><span class="eyebrow" id="deviceState">NO STREAM</span></div>
+    <div class="telemetry">
+     <div class="metric"><label>Distance</label><b class="primary-num" id="distance">—</b><em id="distanceNote">(delay·c + spacing) / 2</em></div>
+     <div class="metric"><label>Echo delay</label><b id="tof">—</b><em id="tofNote">After direct arrival</em></div>
+     <div class="metric"><label>Echo SNR</label><b id="quality">—</b><em>Above local CFAR floor</em></div>
+     <div class="metric"><label>Echo level</label><b id="echoLevel">—</b><em id="echoLevelNote">Re direct path</em></div>
+     <div class="metric"><label>Direct path</label><b id="directLevel">—</b><em id="directSnr">not locked</em></div>
+     <div class="metric"><label>Mic input RMS</label><b id="micLevel">—</b><em>Digital level</em></div>
+     <div class="metric"><label>Sample rate</label><b id="samplerate">—</b><em id="sweepLabel">18–22 kHz sweep</em></div>
+     <div class="metric"><label>DSP time</label><b id="dspLoad">—</b><em>Per chirp (average)</em></div>
+     <div class="metric"><label>3D points</label><b id="pointCount">0</b><em>CFAR-gated</em></div>
+    </div>
+    <div class="statusline"><span>DETECTION</span><strong id="detectState">—</strong></div>
+    <div class="angles"><span><span id="angA">REL YAW</span> <strong id="yaw">—</strong></span><span><span id="angB">PITCH</span> <strong id="pitch">—</strong></span><span><span id="angC">ROLL</span> <strong id="roll">—</strong></span></div>
+    <div class="corr"><div class="eyebrow" style="margin-bottom:8px">Range profile · matched filter (dB re direct)</div><canvas id="profile" aria-label="Echo power versus range with detection threshold"></canvas><div class="corr-note"><span class="legend"><i></i>echo<i class="thr"></i>threshold<i class="min"></i>ignored</span><span id="corrNote">AWAITING SIGNAL</span></div></div>
+    <div class="diagnostic" id="diagnostic">No audio analysed yet. Use <strong>Run 3D demo</strong> to validate the pipeline first. In live mode a point needs a locked chirp, an echo above threshold, and a known or manually specified beam direction.</div>
+   </section>
+  </div>
+ </main>
+ <section class="explain"><strong>Engineering boundary</strong><p>Live mode loops a chirp, locks onto the strongest periodic arrival (presumed to be direct speaker→mic leakage), and turns each chirp into a range profile: Hamming-weighted matched filter → analytic envelope → normalised to the direct arrival → averaged → optional baseline subtraction → median CFAR detection. Range is <code>(delay × c + spacing) / 2</code> with <code>c</code> from air temperature. A wide phone beam off a smooth wall mostly returns the nearest <em>perpendicular</em> point, not the point along the aim line, and the true radiation axis of your speaker is unknown to the app. Laptop stereo mode instead triangulates from two speakers: left speaker up-chirp and right speaker down-chirp on alternate periods; it gives distance and left–right angle only (about 5° per 2 cm of range error with a 28 cm baseline). Up/down and front/back cannot be separated with three transducers in a line, and reflectors at nearly equal path lengths merge. Speaker/mic high-frequency response, OS audio processing, multipath, hand motion and untracked phone translation can all invalidate distances. Research prototype — not a calibrated depth sensor, SLAM, or clinical ultrasound. The wireframe links nearby angular samples for illustration only.</p></section>
+ <div class="footer">Runs entirely in this page. No recordings or scan data are uploaded. Microphone and motion sensors need HTTPS, localhost or a local file, and do not work inside sandboxed previews. Simulation mode never opens the microphone.</div>
+</div>
+<script>
+/* EchoScope DSP core v1.2 — dependency-free. Browser: window.EchoDSP · Node: module.exports */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.EchoDSP = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const TAU = 2 * Math.PI;
+  const nextPow2 = n => { let p = 1; while (p < n) p <<= 1; return p; };
+  const speedOfSound = tempC => 331.3 * Math.sqrt(1 + tempC / 273.15);
+  const db10 = p => 10 * Math.log10(Math.max(p, 1e-30));
+  const db20 = a => 20 * Math.log10(Math.max(a, 1e-15));
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ---------------------------------------------------------------------------
+  // FFT: iterative radix-2 with cached bit-reversal and twiddle tables.
+  // ---------------------------------------------------------------------------
+  const fftCache = new Map();
+  function getFFT(n) {
+    let f = fftCache.get(n);
+    if (f) return f;
+    const bits = Math.round(Math.log2(n));
+    if (1 << bits !== n) throw Error('FFT size must be a power of two');
+    const rev = new Uint32Array(n);
+    for (let i = 0; i < n; i++) {
+      let r = 0, x = i;
+      for (let b = 0; b < bits; b++) { r = (r << 1) | (x & 1); x >>= 1; }
+      rev[i] = r;
+    }
+    const half = n >> 1, cos = new Float64Array(half), sin = new Float64Array(half);
+    for (let i = 0; i < half; i++) { const a = TAU * i / n; cos[i] = Math.cos(a); sin[i] = Math.sin(a); }
+    function transform(re, im, inverse, scale = true) {
+      for (let i = 0; i < n; i++) {
+        const j = rev[i];
+        if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+      }
+      const sg = inverse ? 1 : -1;
+      for (let size = 2; size <= n; size <<= 1) {
+        const h = size >> 1, step = n / size;
+        for (let start = 0; start < n; start += size) {
+          for (let j = start, k = 0, end = start + h; j < end; j++, k += step) {
+            const l = j + h, wr = cos[k], wi = sg * sin[k];
+            const xr = re[l] * wr - im[l] * wi, xi = re[l] * wi + im[l] * wr;
+            re[l] = re[j] - xr; im[l] = im[j] - xi; re[j] += xr; im[j] += xi;
+          }
+        }
+      }
+      if (inverse && scale) { const s = 1 / n; for (let i = 0; i < n; i++) { re[i] *= s; im[i] *= s; } }
+    }
+    f = { n, transform };
+    fftCache.set(n, f);
+    return f;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Linear FM chirp with a 12 % raised-cosine (Tukey) taper. x may be fractional.
+  // ---------------------------------------------------------------------------
+  function chirpAt(x, sr, L, f0, f1) {
+    if (x < 0 || x > L - 1) return 0;
+    const t = x / sr, T = L / sr, p = x / Math.max(1, L - 1);
+    const taper = p < 0.12 ? 0.5 * (1 - Math.cos(Math.PI * p / 0.12))
+      : p > 0.88 ? 0.5 * (1 - Math.cos(Math.PI * (1 - p) / 0.12)) : 1;
+    return Math.sin(TAU * (f0 * t + (f1 - f0) * t * t / (2 * T))) * taper;
+  }
+  function makeChirp(sr, L, f0, f1) {
+    const out = new Float32Array(L);
+    for (let i = 0; i < L; i++) out[i] = chirpAt(i, sr, L, f0, f1);
+    return out;
+  }
+
+  // Receive-side weighting (mismatched filter). Lower range sidelobes let weak
+  // echoes be seen next to the much stronger direct speaker→mic arrival.
+  const WINDOWS = {
+    none: () => 1,
+    hamming: p => 0.54 - 0.46 * Math.cos(TAU * p),
+    hann: p => 0.5 - 0.5 * Math.cos(TAU * p),
+    blackman: p => 0.42 - 0.5 * Math.cos(TAU * p) + 0.08 * Math.cos(2 * TAU * p)
+  };
+  // Approximate main-lobe half-width multiplier relative to an unweighted chirp.
+  const WINDOW_WIDEN = { none: 1, hamming: 1.5, hann: 1.7, blackman: 2.1 };
+  function weightedReference(chirp, name) {
+    const w = WINDOWS[name] || WINDOWS.none, L = chirp.length, out = new Float32Array(L);
+    for (let i = 0; i < L; i++) out[i] = chirp[i] * w(i / Math.max(1, L - 1));
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Matched filter producing the ANALYTIC cross-correlation (complex), band-limited
+  // to the chirp band. |z| is the echo envelope, so peak picking no longer chases
+  // the 20 kHz carrier ripple of the raw correlation.
+  // ---------------------------------------------------------------------------
+  class MatchedFilter {
+    constructor(chirp, ref, n, sr, f0, f1) {
+      this.n = n; this.fft = getFFT(n);
+      this.re = new Float64Array(n); this.im = new Float64Array(n);
+      const hr = new Float64Array(n), hi = new Float64Array(n);
+      hr.set(ref); this.fft.transform(hr, hi, false);
+      let gain = 0;
+      for (let i = 0; i < chirp.length; i++) gain += chirp[i] * ref[i];
+      const fLo = Math.min(f0, f1), fHi = Math.max(f0, f1), pad = Math.max(400, 0.15 * (fHi - fLo));
+      this.lo = Math.max(1, Math.floor((fLo - pad) / sr * n));
+      this.hi = Math.min(n / 2 - 1, Math.ceil((fHi + pad) / sr * n));
+      this.Hr = new Float64Array(n); this.Hi = new Float64Array(n);
+      const s = 2 / (gain * n); // ×2 analytic, 1/gain amplitude normalisation, 1/n inverse-FFT scale
+      for (let k = this.lo; k <= this.hi; k++) { this.Hr[k] = hr[k] * s; this.Hi[k] = -hi[k] * s; }
+    }
+    run(seg, len) {
+      const { re, im, Hr, Hi, lo, hi, n } = this;
+      for (let i = 0; i < len; i++) re[i] = seg[i];
+      re.fill(0, len); im.fill(0);
+      this.fft.transform(re, im, false);
+      re.fill(0, 0, lo); im.fill(0, 0, lo); re.fill(0, hi + 1); im.fill(0, hi + 1);
+      for (let k = lo; k <= hi; k++) {
+        const a = re[k], b = im[k], c = Hr[k], d = Hi[k];
+        re[k] = a * c - b * d; im[k] = a * d + b * c;
+      }
+      this.fft.transform(re, im, true, false);
+      return this;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ring buffer addressed by absolute sample index.
+  // ---------------------------------------------------------------------------
+  class SampleRing {
+    constructor(size) { this.size = size; this.buf = new Float32Array(size); this.total = 0; }
+    reset() { this.total = 0; this.buf.fill(0); }
+    push(chunk) {
+      const n = chunk.length; let src = Math.max(0, n - this.size), w = (this.total + src) % this.size;
+      while (src < n) {
+        const k = Math.min(n - src, this.size - w);
+        this.buf.set(chunk.subarray(src, src + k), w);
+        src += k; w = (w + k) % this.size;
+      }
+      this.total += n;
+    }
+    read(start, len, out) {
+      if (start < 0 || start < this.total - this.size || start + len > this.total) return false;
+      let r = start % this.size, o = 0;
+      while (o < len) {
+        const k = Math.min(len - o, this.size - r);
+        out.set(this.buf.subarray(r, r + k), o);
+        o += k; r = (r + k) % this.size;
+      }
+      return true;
+    }
+  }
+
+  // Quickselect median on a scratch copy.
+  function median(src, from, to, scratch) {
+    const n = to - from; if (n <= 0) return 0;
+    for (let i = 0; i < n; i++) scratch[i] = src[from + i];
+    let lo = 0, hi = n - 1; const k = n >> 1;
+    while (lo < hi) {
+      const pivot = scratch[(lo + hi) >> 1]; let i = lo, j = hi;
+      while (i <= j) {
+        while (scratch[i] < pivot) i++;
+        while (scratch[j] > pivot) j--;
+        if (i <= j) { const t = scratch[i]; scratch[i] = scratch[j]; scratch[j] = t; i++; j--; }
+      }
+      if (k <= j) hi = j; else if (k >= i) lo = i; else break;
+    }
+    return scratch[k];
+  }
+  // In-place quickselect: k-th smallest of a[0..n).
+  function select(a, n, k) {
+    let lo = 0, hi = n - 1;
+    while (lo < hi) {
+      const pivot = a[(lo + hi) >> 1]; let i = lo, j = hi;
+      while (i <= j) {
+        while (a[i] < pivot) i++;
+        while (a[j] > pivot) j--;
+        if (i <= j) { const t = a[i]; a[i] = a[j]; a[j] = t; i++; j--; }
+      }
+      if (k <= j) hi = j; else if (k >= i) lo = i; else break;
+    }
+    return a[k];
+  }
+  // Gaussian (log-parabolic) sub-sample peak offset from three power samples.
+  function peakOffset(pm, p0, pp) {
+    if (!(pm > 0 && p0 > 0 && pp > 0)) return 0;
+    const a = Math.log(pm), b = Math.log(p0), c = Math.log(pp), den = a - 2 * b + c;
+    return den < 0 ? clamp(0.5 * (a - c) / den, -0.5, 0.5) : 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Streaming echo pipeline. Locks onto the periodic direct speaker→mic arrival,
+  // processes every chirp exactly once, keeps direct-normalised complex range
+  // profiles, averages them, optionally subtracts a captured clutter baseline,
+  // and detects echoes with an ordered-statistic (median) CFAR detector.
+  // ---------------------------------------------------------------------------
+  // Defaults chosen by sweeping weighting × CFAR type × training length × averaging on
+  // simulated phone captures (test/tune*.mjs): Hamming + median OS-CFAR, 6-lobe windows.
+  const DEFAULTS = {
+    sr: 48000, f0: 18000, f1: 22000, chirpMs: 50, periodMs: 100,
+    maxRange: 4.5, refWindow: 'hamming', trainMul: 6, osQuantile: 0.5,
+    // live-adjustable
+    minRange: 0.3, thresholdDb: 10, average: 2, spacing: 0.05, tempC: 20
+  };
+  const ACQ_MIN_DB = 15, TRACK_MIN_DB = 12, HIST = 8;
+  // Averaging only combines chirps whose aim directions agree within this angle, so a moving
+  // beam is never smeared across different surfaces.
+  const AIM_TOL_COS = Math.cos(1.5 * Math.PI / 180);
+
+  class EchoPipeline {
+    constructor(cfg) { this.cfg = Object.assign({}, DEFAULTS); this.configure(cfg || {}); }
+
+    configure(cfg) {
+      const c = Object.assign(this.cfg, cfg), sr = c.sr;
+      const L = this.L = Math.max(64, Math.round(sr * c.chirpMs / 1000));
+      this.P = Math.round(sr * c.periodMs / 1000);
+      if (this.P < L + 64) throw Error('Repeat interval must exceed chirp duration.');
+      this.chirp = makeChirp(sr, L, c.f0, c.f1);
+      this.ref = weightedReference(this.chirp, c.refWindow);
+      const bw = Math.abs(c.f1 - c.f0);
+      this.lobe = Math.max(3, Math.round(sr / bw * (WINDOW_WIDEN[c.refWindow] || 1)));
+      this.G = this.lobe + 2;                       // CFAR guard cells per side
+      this.T = Math.max(16, Math.round((c.trainMul || 3) * this.lobe)); // CFAR training cells per side
+      this.W = 32;                                  // direct-path tracking tolerance (samples)
+      this.pre = this.G + this.T + 8;               // profile samples kept before the direct peak
+      // 6 % margin so a colder speed-of-sound setting still covers maxRange.
+      this.maxLag = Math.ceil(2 * c.maxRange / 331.3 * sr * 1.06);
+      this.post = this.G + this.T + 2;
+      this.profLen = this.pre + this.maxLag + this.post + 1;
+      this.A = this.pre + this.W;
+      this.segLen = this.pre + 2 * this.W + this.maxLag + this.post + L;
+      this.acqLen = this.P + this.pre + this.maxLag + this.post + L;
+      this.mfTrack = new MatchedFilter(this.chirp, this.ref, nextPow2(this.segLen), sr, c.f0, c.f1);
+      this.mfAcq = new MatchedFilter(this.chirp, this.ref, nextPow2(this.acqLen), sr, c.f0, c.f1);
+      this.seg = new Float32Array(this.acqLen);
+      this.scratch = new Float64Array(Math.max(this.P, this.profLen) + 8);
+      this.tmp = new Float64Array(this.acqLen);
+      this.hist = { re: [], im: [], d0: new Float64Array(HIST), aim: new Array(HIST).fill(null), count: 0, head: 0 };
+      for (let k = 0; k < HIST; k++) { this.hist.re.push(new Float32Array(this.profLen)); this.hist.im.push(new Float32Array(this.profLen)); }
+      this.pow = new Float64Array(this.profLen);
+      this.thr = new Float64Array(this.profLen);
+      this.baseline = null; this.capture = null;
+      this.setLive({});
+      this.reset();
+      return this;
+    }
+
+    // Parameters that may change while running without rebuilding filters.
+    setLive(p) {
+      const c = Object.assign(this.cfg, p);
+      this.speed = speedOfSound(c.tempC);
+      const want = Math.ceil((2 * c.minRange - c.spacing) / this.speed * c.sr);
+      this.minLag = clamp(want, this.G + 2, this.maxLag - 8);
+      this.maxLagLive = Math.min(this.maxLag, Math.ceil((2 * c.maxRange - c.spacing) / this.speed * c.sr));
+      this.alpha = Math.pow(10, c.thresholdDb / 10);
+      this.K = clamp(Math.round(c.average), 1, HIST);
+    }
+
+    reset() {
+      this.mode = 'acquire'; this.misses = 0; this.nextDirect = NaN; this.lastAcqTotal = -Infinity;
+      this.hist.count = 0; this.hist.head = 0; this.directEma = 0; this.acqFails = 0; this.locks = (this.locks || 0);
+    }
+
+    startBaseline(target = 20) {
+      this.capture = { target, count: 0, re: new Float64Array(this.profLen), im: new Float64Array(this.profLen) };
+    }
+    clearBaseline() { this.baseline = null; this.capture = null; }
+
+    // Pull every complete chirp period out of the ring. Returns frames (0..n).
+    process(ring, now = () => 0) {
+      const out = [];
+      for (let iter = 0; iter < 8; iter++) {
+        if (this.mode === 'acquire') {
+          if (ring.total < this.acqLen || ring.total - this.lastAcqTotal < this.P) break;
+          this.lastAcqTotal = ring.total;
+          out.push(this._acquire(ring, now));
+          if (this.mode !== 'track') break;
+        } else {
+          const S = Math.round(this.nextDirect) - this.A;
+          const behind = ring.total - (S + this.segLen);
+          if (behind < 0) break;
+          if (S < ring.total - ring.size) { this.reset(); continue; }
+          if (behind > 3 * this.P) { this.nextDirect += Math.floor(behind / this.P - 1) * this.P; continue; }
+          out.push(this._track(ring, S, now));
+        }
+      }
+      return out;
+    }
+
+    _stats(len) {
+      const s = this.seg; let sum = 0, clip = 0, peak = 0;
+      for (let i = 0; i < len; i++) { const v = s[i], a = v < 0 ? -v : v; sum += v * v; if (a > peak) peak = a; if (a > 0.985) clip++; }
+      return { micRms: Math.sqrt(sum / len), micPeak: peak, clipFrac: clip / len };
+    }
+
+    _acquire(ring, now) {
+      const t0 = now(), len = this.acqLen, S = ring.total - len;
+      ring.read(S, len, this.seg);
+      const st = this._stats(len);
+      const { re, im } = this.mfAcq.run(this.seg, len);
+      const tmp = this.tmp; let best = -1, bestP = 0;
+      for (let j = this.pre; j < this.pre + this.P; j++) {
+        const p = re[j] * re[j] + im[j] * im[j]; tmp[j] = p;
+        if (p > bestP) { bestP = p; best = j; }
+      }
+      const floorP = median(tmp, this.pre, this.pre + this.P, this.scratch) || 1e-30;
+      const ratioDb = db10(bestP / floorP), amp = Math.sqrt(bestP);
+      // After a dropout, refuse candidates far weaker than the known direct path (likely an echo).
+      const weak = this.directEma > 0 && amp < 0.25 * this.directEma;
+      if (best < 0 || ratioDb < ACQ_MIN_DB || bestP < 1e-16 || weak) {
+        if (++this.acqFails >= 4) { this.directEma = 0; this.hist.count = 0; } // level really changed: start fresh
+        return Object.assign(st, { status: 'searching', directDb: db20(amp), directSnrDb: ratioDb, echo: null, peaks: [], dspMs: now() - t0 });
+      }
+      this.mode = 'track'; this.misses = 0; this.acqFails = 0; this.locks++;
+      return this._accept(S, best, re, im, st, t0, ratioDb, now);
+    }
+
+    _track(ring, S, now) {
+      const t0 = now();
+      ring.read(S, this.segLen, this.seg);
+      const st = this._stats(this.segLen);
+      const { re, im } = this.mfTrack.run(this.seg, this.segLen);
+      let best = -1, bestP = 0;
+      for (let j = this.A - this.W; j <= this.A + this.W; j++) {
+        const p = re[j] * re[j] + im[j] * im[j];
+        if (p > bestP) { bestP = p; best = j; }
+      }
+      const tmp = this.tmp, a = best + this.minLag, b = best + this.maxLagLive;
+      for (let j = a; j < b; j++) tmp[j] = re[j] * re[j] + im[j] * im[j];
+      const floorP = median(tmp, a, b, this.scratch) || 1e-30;
+      const ratioDb = db10(bestP / floorP), amp = Math.sqrt(bestP);
+      const ok = ratioDb >= TRACK_MIN_DB && (!this.directEma || amp > 0.25 * this.directEma);
+      if (!ok) {
+        // Lost the direct arrival (sample drop/insert, blocked speaker, transient): re-acquire on the
+        // newest data right away; averaged profiles stay valid because they are direct-normalised.
+        this.misses++; this.mode = 'acquire'; this.lastAcqTotal = -Infinity;
+        return Object.assign(st, { status: 'dropout', directDb: db20(amp), directSnrDb: ratioDb, echo: null, peaks: [], dspMs: now() - t0 });
+      }
+      this.misses = 0;
+      return this._accept(S, best, re, im, st, t0, ratioDb, now);
+    }
+
+    _accept(S, best, re, im, st, t0, ratioDb, now) {
+      const pw = j => re[j] * re[j] + im[j] * im[j];
+      const d0 = peakOffset(pw(best - 1), pw(best), pw(best + 1));
+      this.lastDirect = S + best + d0;
+      this.nextDirect = this.lastDirect + this.P;
+      const dr = re[best], di = im[best], dp = dr * dr + di * di, amp = Math.sqrt(dp);
+      this.directEma = this.directEma ? 0.8 * this.directEma + 0.2 * amp : amp;
+      const h = this.hist, slot = h.head;
+      h.head = (h.head + 1) % HIST; h.count = Math.min(h.count + 1, HIST); h.d0[slot] = d0;
+      // Optional aim tag supplied by the host app: aimOf(sampleIndex) → unit vector or null.
+      h.aim[slot] = this.aimOf ? this.aimOf(this.lastDirect + this.L / 2) : null;
+      const pr = h.re[slot], pi = h.im[slot], ir = dr / dp, ii = -di / dp, off = best - this.pre;
+      for (let m = 0; m < this.profLen; m++) {
+        const a = re[off + m], b = im[off + m];
+        pr[m] = a * ir - b * ii; pi[m] = a * ii + b * ir;
+      }
+      let captureDone = false;
+      if (this.capture) {
+        const c = this.capture;
+        for (let m = 0; m < this.profLen; m++) { c.re[m] += pr[m]; c.im[m] += pi[m]; }
+        if (++c.count >= c.target) {
+          const bre = new Float32Array(this.profLen), bim = new Float32Array(this.profLen);
+          for (let m = 0; m < this.profLen; m++) { bre[m] = c.re[m] / c.count; bim[m] = c.im[m] / c.count; }
+          this.baseline = { re: bre, im: bim, count: c.count }; this.capture = null; captureDone = true;
+        }
+      }
+      const det = this._detect();
+      return Object.assign(st, det, {
+        status: det.echo ? 'echo' : 'noecho', direct: this.lastDirect, directDb: db20(amp), directSnrDb: ratioDb,
+        capture: this.capture ? this.capture.count / this.capture.target : null, captureDone,
+        dspMs: now() - t0
+      });
+    }
+
+    // Ordered-statistic background: quantile of the training cells (both sides), evaluated on a
+    // decimated grid and linearly interpolated, scaled to an exponential-distribution mean.
+    _osBackground(lo, hi) {
+      if (!this.bg || this.bg.length !== this.profLen) this.bg = new Float64Array(this.profLen);
+      const pow = this.pow, G = this.G, T = this.T, bg = this.bg, dec = Math.max(1, this.lobe >> 2);
+      const vals = this.osVals && this.osVals.length >= 2 * T + 4 ? this.osVals : (this.osVals = new Float64Array(2 * T + 4));
+      const q = this.cfg.osQuantile || 0.5, toMean = -1 / Math.log(1 - q);
+      let prevM = -1, prevV = 0;
+      for (let m = lo; ; m += dec) {
+        if (m > hi) m = hi;
+        let n = 0;
+        for (let j = m - G - T; j < m - G; j += dec) vals[n++] = pow[j];
+        for (let j = m + G + 1; j <= m + G + T; j += dec) vals[n++] = pow[j];
+        const v = select(vals, n, Math.floor(q * (n - 1))) * toMean;
+        if (prevM < 0) bg[m] = v;
+        else for (let k = prevM + 1; k <= m; k++) bg[k] = prevV + (v - prevV) * (k - prevM) / (m - prevM);
+        prevM = m; prevV = v;
+        if (m === hi) break;
+      }
+      return bg;
+    }
+
+    _detect() {
+      const h = this.hist, N = this.profLen, pow = this.pow, B = this.baseline;
+      const newest = (h.head - 1 + HIST) % HIST, a0 = h.aim[newest];
+      let K = 1;
+      for (let k = 1; k < Math.min(this.K, h.count); k++) {
+        const ak = h.aim[(h.head - 1 - k + HIST) % HIST];
+        if (a0 && ak && a0[0] * ak[0] + a0[1] * ak[1] + a0[2] * ak[2] < AIM_TOL_COS) break;
+        K++;
+      }
+      pow.fill(0); let d0 = 0;
+      for (let k = 0; k < K; k++) {
+        const slot = (h.head - 1 - k + HIST) % HIST, pr = h.re[slot], pi = h.im[slot];
+        d0 += h.d0[slot];
+        if (B) for (let m = 0; m < N; m++) { const a = pr[m] - B.re[m], b = pi[m] - B.im[m]; pow[m] += a * a + b * b; }
+        else for (let m = 0; m < N; m++) pow[m] += pr[m] * pr[m] + pi[m] * pi[m];
+      }
+      const inv = 1 / K; for (let m = 0; m < N; m++) pow[m] *= inv;
+      d0 /= K;
+      const thr = this.thr, G = this.G, alpha = this.alpha;
+      const lo = this.pre + this.minLag, hi = this.pre + this.maxLagLive, absFloor = 1e-10;
+      thr.fill(NaN);
+      const cands = [], bg = this._osBackground(lo, hi);
+      for (let m = lo; m <= hi; m++) {
+        const t = alpha * Math.max(bg[m], absFloor); thr[m] = t;
+        const p = pow[m];
+        if (p > t && p >= pow[m - 1] && p > pow[m + 1]) cands.push(m);
+      }
+      cands.sort((a, b) => pow[b] / thr[b] - pow[a] / thr[a]);
+      const peaks = [];
+      for (const m of cands) {
+        let clash = false;
+        for (const q of peaks) if (Math.abs(q.index - m) <= G) { clash = true; break; }
+        if (clash) continue;
+        const frac = peakOffset(pow[m - 1], pow[m], pow[m + 1]);
+        const lag = m - this.pre + frac - d0, delay = lag / this.cfg.sr;
+        peaks.push({
+          index: m, lag, delay, distance: (delay * this.speed + this.cfg.spacing) / 2,
+          levelDb: db10(pow[m]), snrDb: db10(pow[m] * alpha / thr[m])
+        });
+        if (peaks.length >= (this.cfg.maxPeaks || 4)) break;
+      }
+      const floorDb = db10(median(pow, lo, hi + 1, this.scratch));
+      return { echo: peaks[0] || null, peaks, floorDb, averaged: K };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Synthetic phone-like capture: direct leakage with speaker HF roll-off, phone
+  // body/hand self-response, scene echoes, diffuse reverberation, mic noise,
+  // low-frequency hum and speaker/mic clock drift. Used by the demo and tests.
+  // ---------------------------------------------------------------------------
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  class SyntheticStream {
+    // variants: per-chirp waveform cycle, e.g. [{f0:18e3,f1:22e3}, {f0:22e3,f1:18e3,offset,gain}] for
+    // time-multiplexed stereo. offset (samples) and gain shift/scale that speaker's own direct path.
+    constructor(o) {
+      this.o = Object.assign({
+        sr: 48000, f0: 18000, f1: 22000, chirpMs: 50, periodMs: 100, latency: 731.37, driftPpm: 25,
+        directAmp: 0.2, noise: 0.0015, tiltDb: -8, selfTaps: 10, selfDb: -14, reverbDb: -52, reverbMs: 60,
+        hum: 0.02, seed: 7, staticPaths: [], exact: false, variants: null
+      }, o);
+      const s = this.o;
+      this.L = Math.round(s.sr * s.chirpMs / 1000); this.P = Math.round(s.sr * s.periodMs / 1000);
+      this.variants = (s.variants || [{ f0: s.f0, f1: s.f1 }]).map(v => Object.assign({ offset: 0, gain: 1 }, v));
+      this.rng = mulberry32(s.seed); this.spare = null;
+      this.self = [];
+      for (let i = 0; i < s.selfTaps; i++) {
+        const tau = 0.06e-3 + 1.25e-3 * this.rng();
+        const amp = Math.pow(10, (s.selfDb - 26 * tau / 1.3e-3 - 6 * this.rng()) / 20) * (this.rng() < 0.5 ? -1 : 1);
+        this.self.push({ delay: tau, amp });
+      }
+      // Static diffuse reverberation impulse response (decaying noise), shared by all variants.
+      const revLen = Math.round(s.sr * s.reverbMs / 1000), start = Math.round(s.sr * 0.002);
+      const h = new Float64Array(revLen), tau = s.sr * s.reverbMs / 1000 / 4.5;
+      const lobe = Math.max(3, s.sr / Math.abs(s.f1 - s.f0));
+      const sigma = Math.pow(10, s.reverbDb / 20) / Math.sqrt(lobe * 0.6);
+      for (let i = start; i < revLen; i++) h[i] = this.gauss() * sigma * Math.exp(-(i - start) / tau);
+      let maxOff = 0; for (const v of this.variants) maxOff = Math.max(maxOff, Math.abs(v.offset));
+      this.accLen = this.P * 2 + 2 * this.L + revLen + Math.ceil(s.sr * 0.06) + Math.ceil(maxOff) + 8;
+      this.acc = new Float64Array(this.accLen);
+      this.base = 0; this.n = 0; this.sample = 0;
+      this.vdata = this.variants.map(v => {
+        const ch = makeChirp(s.sr, this.L, v.f0, v.f1), reverb = new Float32Array(this.L + revLen);
+        for (let i = start; i < revLen; i++) { const hv = h[i]; if (!hv) continue; for (let k = 0; k < this.L; k++) reverb[i + k] += hv * ch[k]; }
+        let staticWave = null;
+        if (!s.exact) { // fast mode: everything that does not depend on aim is rendered once
+          let maxD = 0; for (const t of [...this.self, ...s.staticPaths]) maxD = Math.max(maxD, t.delay);
+          staticWave = new Float64Array(Math.max(this.L + Math.ceil(maxD * s.sr) + 2, reverb.length));
+          this._render(staticWave, 0, v.gain, v);
+          for (const t of [...this.self, ...s.staticPaths]) this._render(staticWave, t.delay * s.sr, t.amp * v.gain, v);
+          for (let i = 0; i < reverb.length; i++) staticWave[i] += reverb[i] * s.directAmp * v.gain;
+        }
+        return { reverb, staticWave };
+      });
+    }
+    gauss() {
+      if (this.spare !== null) { const v = this.spare; this.spare = null; return v; }
+      let u = 0; while (u === 0) u = this.rng();
+      const v = this.rng(), r = Math.sqrt(-2 * Math.log(u)); this.spare = r * Math.sin(TAU * v); return r * Math.cos(TAU * v);
+    }
+    // Add amp × (speaker-tilted chirp of variant v) starting at fractional index pos of buf.
+    _render(buf, pos, amp, v) {
+      const s = this.o, L = this.L, sr = s.sr;
+      const i0 = Math.max(0, Math.ceil(pos)), i1 = Math.min(buf.length - 1, Math.floor(pos + L - 1));
+      if (i1 < i0) return;
+      const lnk = Math.LN10 * s.tiltDb / 20 / (L - 1), step = Math.exp(lnk);
+      const T = L / sr, kq = (v.f1 - v.f0) / (2 * T), inv = 1 / Math.max(1, L - 1);
+      let x = i0 - pos, g = amp * s.directAmp * Math.exp(lnk * x);
+      for (let i = i0; i <= i1; i++, x += 1, g *= step) {
+        const t = x / sr, p = x * inv;
+        const taper = p < 0.12 ? 0.5 * (1 - Math.cos(Math.PI * p / 0.12)) : p > 0.88 ? 0.5 * (1 - Math.cos(Math.PI * (1 - p) / 0.12)) : 1;
+        buf[i] += g * taper * Math.sin(TAU * (v.f0 * t + kq * t * t));
+      }
+    }
+    // paths: [{delay: s after that speaker's direct arrival, amp: re nominal direct}] or a function
+    // (variantIndex, chirpIndex) → paths. Chirp n uses variant n mod variants.length.
+    next(paths = []) {
+      const s = this.o, P = this.P, acc = this.acc;
+      for (;;) {
+        const E = s.latency + this.n * P * (1 + s.driftPpm * 1e-6);
+        if (E >= this.base + P) break;
+        const vi = this.n % this.variants.length, v = this.variants[vi], vd = this.vdata[vi];
+        const ps = typeof paths === 'function' ? paths(vi, this.n) : paths;
+        const pos = E - this.base + v.offset;
+        if (s.exact) {
+          this._render(acc, pos, v.gain, v);
+          for (const t of this.self) this._render(acc, pos + t.delay * s.sr, t.amp * v.gain, v);
+          for (const t of s.staticPaths) this._render(acc, pos + t.delay * s.sr, t.amp * v.gain, v);
+          for (const p of ps) if (p.amp) this._render(acc, pos + p.delay * s.sr, p.amp, v);
+          const r0 = Math.round(pos), rv = vd.reverb, A = s.directAmp * v.gain;
+          for (let i = Math.max(0, -r0); i < rv.length && r0 + i < this.accLen; i++) acc[r0 + i] += rv[i] * A;
+        } else {
+          // Integer-aligned emission keeps the precomputed static part and the live echoes coherent.
+          const p0 = Math.round(pos), w = vd.staticWave;
+          for (let i = Math.max(0, -p0); i < w.length && p0 + i < this.accLen; i++) acc[p0 + i] += w[i];
+          for (const p of ps) if (p.amp) this._render(acc, p0 + p.delay * s.sr, p.amp, v);
+        }
+        this.n++;
+      }
+      const out = new Float32Array(P), w1 = TAU * 120 / s.sr, w2 = TAU * 1150 / s.sr;
+      for (let i = 0; i < P; i++) {
+        const n = this.sample + i;
+        const v = acc[i] + this.gauss() * s.noise + s.hum * (Math.sin(w1 * n) + 0.5 * Math.sin(w2 * n + 1));
+        out[i] = v > 1 ? 1 : v < -1 ? -1 : v;
+      }
+      acc.copyWithin(0, P); acc.fill(0, this.accLen - P);
+      this.base += P; this.sample += P;
+      return out;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Stereo triangulation for a stationary laptop: speakers at x = ±b/2 and the
+  // mic at x = m, all on one line. rL / rR are total path lengths speaker →
+  // reflector → mic. Returns x (along the speaker axis, laptop-centred) and q
+  // (distance from that axis); the rotation angle about the axis is unknowable.
+  // ---------------------------------------------------------------------------
+  function triangulate(rL, rR, b, m) {
+    const sL = -b / 2 - m, sR = b / 2 - m;          // speaker positions relative to the mic
+    const D = 4 * (sL * rR - rL * sR);
+    if (Math.abs(D) < 1e-12) return null;
+    const aL = rL * rL - sL * sL, aR = rR * rR - sR * sR;
+    const rho = (-2 * sR * aL + 2 * sL * aR) / D;   // reflector distance from the mic
+    const x = (2 * rL * aR - 2 * rR * aL) / D;      // reflector x relative to the mic
+    const q2 = rho * rho - x * x;
+    // Reflectors on the speaker axis (side walls) sit at q≈0; allow 3 cm of measurement inconsistency.
+    if (!(rho > 0) || rho - Math.abs(x) < -0.03) return null;
+    return { x: x + m, q: Math.sqrt(Math.max(0, q2)), rho };
+  }
+  // Associate echoes heard via the left and right speakers. Items: {r, snrDb, levelDb}.
+  // A pair must obey |rL − rR| ≤ b (triangle inequality) and have similar strength.
+  // minSnrDb: both echoes must clear it. Weak detections are what pair up into ghosts (in simulation a
+  // 14 dB floor kept 90 % of true pairs and 7 % of ghost pairs).
+  function pairEchoes(listL, listR, b, m, minSnrDb = 14) {
+    const cands = [];
+    for (let i = 0; i < listL.length; i++) for (let j = 0; j < listR.length; j++) {
+      const a = listL[i], c = listR[j];
+      if (a.snrDb < minSnrDb || c.snrDb < minSnrDb) continue;
+      if (Math.abs(a.r - c.r) > b + 0.03) continue;
+      const dLev = Math.abs(a.levelDb - c.levelDb);
+      if (dLev > 12) continue;
+      const t = triangulate(a.r, c.r, b, m);
+      if (!t) continue;
+      const snr = Math.min(a.snrDb, c.snrDb);
+      cands.push({ i, j, x: t.x, q: t.q, rho: t.rho, snrDb: snr, levelDb: 0.5 * (a.levelDb + c.levelDb), rL: a.r, rR: c.r, score: snr - 0.3 * dLev });
+    }
+    cands.sort((u, v) => v.score - u.score);
+    const usedL = new Set(), usedR = new Set(), out = [];
+    for (const p of cands) {
+      if (usedL.has(p.i) || usedR.has(p.j)) continue;
+      usedL.add(p.i); usedR.add(p.j); out.push(p);
+    }
+    return out;
+  }
+
+  // Combines the latest left (up-chirp) and right (down-chirp) frames. Learns the mic position
+  // along the speaker axis from the direct-path timing difference (the mic is assumed to sit on
+  // the line between the speakers), then pairs and triangulates echoes. Robust to audio glitches:
+  // the timing reference is a running median, frames that disagree with it are skipped, and a
+  // pair is only "confirmed" once a pair within 10 cm also appeared in one of the last 3 frames.
+  class StereoPairer {
+    constructor(b) { this.b = b; this.m = null; this.frames = [null, null]; this.outside = false; this.minSnrDb = 14; this.dHist = []; this.recent = []; this.glitches = 0; }
+    push(f, idx, P, sr, speed) {
+      this.frames[idx] = f;
+      const fl = this.frames[0], fr = this.frames[1], ok = x => x && (x.status === 'echo' || x.status === 'noecho') && Number.isFinite(x.direct);
+      if (!ok(fl) || !ok(fr) || Math.abs(fr.direct - fl.direct) > 3 * P) return null;
+      const P2 = 2 * P; let u = ((fr.direct - fl.direct - P) % P2 + P2) % P2; if (u > P) u -= P2;
+      const dDiff = u / sr * speed, b = this.b, H = this.dHist;  // d_R − d_L in metres
+      H.push(dDiff); if (H.length > 15) H.shift();
+      const sorted = H.slice().sort((a, c) => a - c), med = sorted[sorted.length >> 1];
+      if (H.length >= 3 && Math.abs(dDiff - med) > 0.015) { this.glitches++; return null; } // samples lost between L and R
+      this.outside = Math.abs(med) > b * 1.02;
+      const m = this.m = clamp(-med / 2, -b / 2, b / 2), dL = b / 2 + m, dR = b / 2 - m;
+      // Compare absolute echo levels (re full scale): the two direct paths differ a lot when the
+      // mic sits close to one speaker, so direct-relative levels are not comparable across channels.
+      const list = (x, d) => (x.peaks || []).map(p => ({ r: p.delay * speed + d, snrDb: p.snrDb, levelDb: p.levelDb + x.directDb }));
+      const pairs = pairEchoes(list(fl, dL), list(fr, dR), b, m, this.minSnrDb);
+      for (const p of pairs) p.confirmed = this.recent.some(prev => prev.some(q => Math.hypot(q.x - p.x, q.q - p.q) < 0.1));
+      this.recent.push(pairs); if (this.recent.length > 3) this.recent.shift();
+      return { pairs, m, dL, dR, outside: this.outside };
+    }
+  }
+
+  return { nextPow2, speedOfSound, db10, db20, getFFT, chirpAt, makeChirp, weightedReference, MatchedFilter, SampleRing, EchoPipeline, SyntheticStream, triangulate, pairEchoes, StereoPairer, median, peakOffset, DEFAULTS };
+});
+</script>
+<script>
+/* EchoScope app v1.3 — UI, audio I/O, orientation, stereo triangulation and rendering. DSP lives in EchoDSP. */
+(() => {
+  'use strict';
+  const D = window.EchoDSP;
+  const $ = id => document.getElementById(id);
+  const DEG = Math.PI / 180, MAX_POINTS = 4000, RING = 1 << 17, DEMO_SPEED = 3, BASELINE_CHIRPS = 20, VOX = 0.03;
+  const BANDS = {
+    ultra: [18000, 22000, '18–22 kHz sweep'],
+    near: [15000, 20000, '15–20 kHz sweep'],
+    audible: [1000, 4000, '1–4 kHz sweep']
+  };
+  // Device-frame beam axis, and the fixed rotation that maps that axis to scene "forward" (−z).
+  const AXES = {
+    back: { v: [0, 0, -1], q: [1, 0, 0, 0] },
+    bottom: { v: [0, -1, 0], q: [0, 0, Math.SQRT1_2, Math.SQRT1_2] },
+    screen: { v: [0, 0, 1], q: [0, 0, 1, 0] }
+  };
+  const HINTS = {
+    sensors: 'Phone on HTTPS: hold still while the chirp locks, then sweep slowly. Each echo is placed along the measured aim.',
+    stereo: 'Laptop on a desk: the two speakers take turns, and the difference in echo path lengths places reflectors left–right. Nothing has to move.',
+    manual: 'Every echo is drawn along the slider direction. A device that is not moving cannot sense where an echo came from, so this gives a single line.'
+  };
+
+  const ids = ['startBtn', 'quickDemo', 'demo', 'aimMode', 'aimHint', 'manualPanel', 'stereoPanel', 'aimYaw', 'aimPitch', 'spkSpacing', 'elev',
+    'band', 'duration', 'period', 'volume', 'threshold', 'average', 'minRange', 'maxRange', 'spacing', 'temp', 'axis', 'baseBtn', 'baseClear',
+    'baseState', 'baseHelp', 'message', 'status', 'statusText', 'scene', 'viewport', 'profile', 'clearBtn', 'zeroBtn', 'exportBtn',
+    'sensorsPanel', 'mStart', 'mClear', 'mZero'];
+  const ui = {}; for (const id of ids) ui[id] = $(id);
+
+  const state = {
+    running: false, busy: false, mode: null, cloudKey: null,
+    ctx: null, source: null, stream: null, micSource: null, tap: null, gain: null, wakeLock: null,
+    ring: new D.SampleRing(RING), pipes: [], pipe: null, stereo: null, synth: null, timer: null, captureType: '',
+    sr: 48000, f0: 18000, f1: 22000,
+    points: [], cells: new Map(), voxels: new Map(), links: [], linksDirty: false,
+    frame: null, profValid: false, lastEcho: null, lastEchoAt: 0,
+    sensorsSeen: false, rawQuat: [1, 0, 0, 0], zeroQuat: null, relative: { alpha: 0, beta: 0, gamma: 0 },
+    beam: [0, 0, -1], aimLog: [], demoStep: 0,
+    camera: { yaw: -0.6, pitch: 0.29, dist: 8.2, tz: 0 }, pointers: new Map(), gesture: null,
+    sceneDirty: true, profDirty: true, lastUi: 0, perf: { dsp: 0, draw: 0 }
+  };
+
+  // ---------------------------------------------------------------- helpers
+  const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : '—';
+  const sgn = (v, d = 0) => Number.isFinite(v) ? (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d) : '—';
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const textCache = new Map(), elCache = new Map();
+  function setText(id, v) {
+    if (textCache.get(id) === v) return;
+    textCache.set(id, v);
+    let el = elCache.get(id); if (!el) { el = $(id); elCache.set(id, el); }
+    if (el) el.textContent = v;
+  }
+  function setMessage(text, type = 'info') {
+    ui.message.className = 'message' + (type === 'error' ? ' error' : type === 'warn' ? ' warn' : '');
+    ui.message.textContent = text;
+  }
+  function markStatus(text, mode = '') { ui.status.className = 'status ' + mode; ui.statusText.textContent = text; }
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function setMobileStart(on) { ui.mStart.textContent = on ? '■ Stop' : '▶ Start'; ui.mStart.classList.toggle('running', on); }
+  const aimMode = () => ui.aimMode.value;
+  const manualMode = () => aimMode() === 'manual';
+  const hasAim = () => state.mode === 'demo' || manualMode() || state.sensorsSeen;
+  const stereoB = () => +ui.spkSpacing.value / 100;
+  function settings() {
+    const b = BANDS[ui.band.value] || BANDS.ultra;
+    return {
+      f0: b[0], f1: b[1], chirpMs: +ui.duration.value, periodMs: +ui.period.value, maxRange: +ui.maxRange.value,
+      minRange: +ui.minRange.value, thresholdDb: +ui.threshold.value, average: +ui.average.value,
+      spacing: +ui.spacing.value / 100, tempC: +ui.temp.value
+    };
+  }
+  function liveSettings() {
+    const s = settings(), out = { minRange: s.minRange, thresholdDb: s.thresholdDb, average: s.average, tempC: s.tempC, maxRange: s.maxRange };
+    if (!state.stereo) out.spacing = s.spacing; // stereo learns each speaker's direct path itself
+    return out;
+  }
+  function updateControls() {
+    setText('durationVal', ui.duration.value + ' ms'); setText('periodVal', ui.period.value + ' ms'); setText('volumeVal', ui.volume.value + '%');
+    setText('thresholdVal', ui.threshold.value + ' dB'); setText('averageVal', ui.average.value + (ui.average.value === '1' ? ' chirp' : ' chirps'));
+    setText('minRangeVal', (+ui.minRange.value).toFixed(2) + ' m'); setText('maxRangeVal', (+ui.maxRange.value).toFixed(1) + ' m');
+    setText('spacingVal', ui.spacing.value + ' cm'); setText('tempVal', ui.temp.value + ' °C');
+    setText('aimYawVal', ui.aimYaw.value + '°'); setText('aimPitchVal', ui.aimPitch.value + '°');
+    setText('spkSpacingVal', ui.spkSpacing.value + ' cm'); setText('elevVal', ui.elev.value + '°');
+    setText('sweepLabel', (BANDS[ui.band.value] || BANDS.ultra)[2] + (state.stereo ? ' · L↑ R↓' : ''));
+  }
+  function lockSignal(on) {
+    for (const e of [ui.demo, ui.band, ui.duration, ui.period, ui.maxRange, ui.spkSpacing]) e.disabled = on;
+    ui.baseBtn.disabled = !on; ui.baseClear.disabled = !on;
+    // Stereo needs its own output buffer and pipelines: it can only be entered or left between runs.
+    ui.aimMode.disabled = on && !!state.stereo;
+    for (const o of ui.aimMode.options) o.disabled = on && !state.stereo && o.value === 'stereo';
+  }
+
+  // ---------------------------------------------------------------- point cloud
+  function setCounts() {
+    const n = state.points.length;
+    setText('pointCount', String(n)); setText('hudSamples', `POINTS: ${n} / ${MAX_POINTS}`);
+    setText('cloudHint', n ? `${n} ${state.cloudKey && state.cloudKey.startsWith('demo') ? 'synthetic' : 'estimated'} samples captured` : 'No measured points yet');
+  }
+  function clearCloud() {
+    state.points.length = 0; state.cells.clear(); state.voxels.clear(); state.links.length = 0;
+    state.sceneDirty = true; setCounts();
+  }
+  // Adds a point unless its 3 cm voxel is already occupied (no pile-up while stationary).
+  function addXYZ(x, y, z, range, snr) {
+    const vk = Math.round(x / VOX) + ',' + Math.round(y / VOX) + ',' + Math.round(z / VOX);
+    if (state.voxels.has(vk)) return false;
+    const r = Math.hypot(x, y, z) || 1;
+    const p = { x, y, z, range, snr, vk, key: 0, sx: 0, sy: 0, sr: 0, vis: false };
+    const yawBin = Math.round(Math.atan2(x, -z) / (4 * DEG)), pitchBin = Math.round(Math.asin(clamp(y / r, -1, 1)) / (4 * DEG));
+    p.key = (yawBin + 512) * 1024 + (pitchBin + 512);
+    state.points.push(p); state.cells.set(p.key, p); state.voxels.set(vk, p);
+    if (state.points.length > MAX_POINTS) {
+      const old = state.points.shift();
+      if (state.cells.get(old.key) === old) state.cells.delete(old.key);
+      if (state.voxels.get(old.vk) === old) state.voxels.delete(old.vk);
+    }
+    state.linksDirty = true; state.sceneDirty = true; setCounts();
+    return true;
+  }
+  function addPoint(distance, beam, snr) {
+    const s = settings();
+    if (!(distance >= s.minRange && distance <= s.maxRange)) return false;
+    return addXYZ(beam[0] * distance, beam[1] * distance, beam[2] * distance, distance, snr);
+  }
+  function savePLY() {
+    if (!state.points.length) { setMessage('No points to export. Scan or run the demo first.', 'warn'); return; }
+    const maxR = +ui.maxRange.value, lines = [
+      'ply', 'format ascii 1.0', 'comment EchoScope v1.3 experimental point cloud (not metrically calibrated)',
+      'comment ' + (state.stereo ? 'stereo triangulation: x along speaker axis, rotation about that axis assumed' : 'aimed sonar: points placed along the beam'),
+      'comment quality = echo SNR in dB above the local CFAR floor',
+      'element vertex ' + state.points.length, 'property float x', 'property float y', 'property float z',
+      'property uchar red', 'property uchar green', 'property uchar blue', 'property float quality', 'end_header'];
+    for (const p of state.points) {
+      const t = Math.min(1, p.range / maxR);
+      lines.push(`${p.x.toFixed(5)} ${p.y.toFixed(5)} ${p.z.toFixed(5)} ${Math.round(55 + 100 * t)} ${Math.round(240 - 60 * t)} ${Math.round(205 + 40 * t)} ${fmt(p.snr, 2)}`);
+    }
+    const u = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'application/octet-stream' }));
+    const a = document.createElement('a');
+    a.href = u; a.download = 'echoscope-' + (state.cloudKey || 'scan').replace(':', '-') + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.ply';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 3000);
+  }
+
+  // ---------------------------------------------------------------- orientation (quaternions, W3C Z-X'-Y'')
+  function qmul(a, b) { return [a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3], a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2], a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1], a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]]; }
+  function qaxis(axis, a) { const s = Math.sin(a / 2), c = Math.cos(a / 2); return axis === 'x' ? [c, s, 0, 0] : axis === 'y' ? [c, 0, s, 0] : [c, 0, 0, s]; }
+  const qconj = q => [q[0], -q[1], -q[2], -q[3]];
+  const qnorm = q => { const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return [q[0] / n, q[1] / n, q[2] / n, q[3] / n]; };
+  const qrotate = (q, v) => qmul(qmul(q, [0, v[0], v[1], v[2]]), qconj(q)).slice(1);
+  const orientationQuat = (a, b, g) => qnorm(qmul(qmul(qaxis('z', a * DEG), qaxis('x', b * DEG)), qaxis('y', g * DEG)));
+  function relativeEuler(q) {
+    const [w, x, y, z] = q, cl = v => clamp(v, -1, 1);
+    return {
+      alpha: Math.atan2(-2 * (x * y - w * z), 1 - 2 * (x * x + z * z)) / DEG,
+      beta: Math.asin(cl(2 * (y * z + w * x))) / DEG,
+      gamma: Math.atan2(-2 * (x * z - w * y), 1 - 2 * (x * x + y * y)) / DEG
+    };
+  }
+  function sensorBeam() {
+    const ax = AXES[ui.axis.value] || AXES.back;
+    const rel = state.zeroQuat ? qmul(qconj(state.zeroQuat), state.rawQuat) : [1, 0, 0, 0];
+    state.relative = relativeEuler(rel);
+    state.beam = qrotate(ax.q, qrotate(rel, ax.v));
+  }
+  function sensorEvent(e) {
+    if (state.mode === 'live' && aimMode() !== 'sensors') return;
+    if (![e.alpha, e.beta, e.gamma].every(Number.isFinite)) return;
+    state.sensorsSeen = true;
+    state.rawQuat = orientationQuat(e.alpha, e.beta, e.gamma);
+    if (!state.zeroQuat) state.zeroQuat = state.rawQuat.slice();
+    if (state.mode !== 'demo') { sensorBeam(); setText('hudOrientation', 'ORIENTATION: DEVICE SENSOR · ' + ui.axis.value.toUpperCase() + ' AXIS'); state.sceneDirty = true; }
+  }
+  function requestSensors() {
+    if (!window.isSecureContext || typeof DeviceOrientationEvent === 'undefined') return Promise.resolve();
+    const promises = [];
+    // Must run synchronously inside the Start click (iOS user-activation rule).
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try { promises.push(Promise.resolve(DeviceOrientationEvent.requestPermission())); } catch (_) { }
+    }
+    window.removeEventListener('deviceorientation', sensorEvent);
+    window.addEventListener('deviceorientation', sensorEvent);
+    return Promise.allSettled(promises);
+  }
+  function manualBeam() {
+    const yaw = +ui.aimYaw.value * DEG, pitch = +ui.aimPitch.value * DEG;
+    state.relative = { alpha: +ui.aimYaw.value, beta: +ui.aimPitch.value, gamma: 0 };
+    state.beam = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+    setText('hudOrientation', 'ORIENTATION: MANUAL / ASSUMED'); state.sceneDirty = true;
+  }
+  function updateAimMode() {
+    const m = aimMode();
+    ui.manualPanel.hidden = m !== 'manual'; ui.stereoPanel.hidden = m !== 'stereo'; ui.sensorsPanel.hidden = m !== 'sensors';
+    setText('aimHint', HINTS[m] || '');
+    setText('baseHelp', m === 'stereo'
+      ? 'With a stationary laptop everything in the room is static, so a baseline removes the whole room — afterwards only things that move or appear are detected.'
+      : 'Learns what stays fixed relative to the phone — direct-path tail, phone body, your hand and torso — and subtracts it. Capture while sweeping slowly.');
+    updateControls();
+    if (state.mode !== 'demo' && !state.stereo) {
+      if (m === 'manual') manualBeam();
+      else if (state.sensorsSeen) sensorBeam();
+      else { state.relative = { alpha: 0, beta: 0, gamma: 0 }; state.beam = [0, 0, -1]; setText('hudOrientation', m === 'stereo' ? 'GEOMETRY: STEREO (START TO USE)' : 'ORIENTATION: WAITING'); }
+    }
+    state.sceneDirty = true;
+  }
+  function zeroOrientation() {
+    if (state.stereo) setMessage('Stereo mode has no orientation to zero: positions come from the speaker geometry.');
+    else if (state.mode !== 'demo' && manualMode()) { ui.aimYaw.value = '0'; ui.aimPitch.value = '0'; updateAimMode(); setMessage('Manual yaw and pitch reset to zero; plotted points are unchanged.'); }
+    else if (state.sensorsSeen && state.mode !== 'demo') { state.zeroQuat = state.rawQuat.slice(); sensorBeam(); state.sceneDirty = true; setMessage('Current phone orientation is now the forward reference. Earlier points stay in their original frame.'); }
+    else if (state.mode === 'demo') { state.demoStep = 0; setMessage('Synthetic sweep restarted from the first raster position.'); }
+    else setMessage('No device orientation received. Sensor permission may be unavailable or denied.', 'warn');
+  }
+  // Aim history keyed by absolute sample index, so each echo is placed along the beam that was
+  // active when its chirp was captured (not when it finished processing).
+  function logAim(sampleIndex) {
+    const log = state.aimLog;
+    log.push({ s: sampleIndex, b: state.beam.slice() });
+    if (log.length > 96) log.splice(0, log.length - 96);
+  }
+  function aimAt(sampleIndex) {
+    const log = state.aimLog;
+    for (let i = log.length - 1; i >= 0; i--) if (log[i].s <= sampleIndex) return log[i].b;
+    return state.beam;
+  }
+
+  // ---------------------------------------------------------------- synthetic scenes (demo)
+  function demoBeam() {
+    const step = state.demoStep++, cols = 29, row = Math.floor(step / cols), col = step % cols;
+    const fraction = (row % 2 === 0 ? col : cols - 1 - col) / (cols - 1);
+    const yaw = (2 * fraction - 1) * 0.74, pitch = -0.39 + ((row % 13) / 12) * 0.78;
+    state.relative = { alpha: yaw / DEG, beta: pitch / DEG, gamma: 0 };
+    return [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+  }
+  function syntheticDistance(b) {
+    const [x, y, z] = b; let d = Infinity;
+    const tryPlane = (t, valid) => { if (t > 0.25 && valid && t < d) d = t; };
+    if (z < -0.001) {
+      const t = -3.15 / z; tryPlane(t, Math.abs(x * t) <= 2.7 && Math.abs(y * t) <= 1.55);
+      const boxT = -1.63 / z; tryPlane(boxT, Math.abs(x * boxT - 0.25) < 0.67 && y * boxT > -0.8 && y * boxT < 0.72);
+    }
+    if (Math.abs(x) > 0.001) { const t = (Math.sign(x) * 2.7) / x; tryPlane(t, Math.abs(y * t) < 1.55 && z * t > -3.15); }
+    if (Math.abs(y) > 0.001) { const t = (Math.sign(y) * 1.55) / y; tryPlane(t, Math.abs(x * t) < 2.7 && z * t > -3.15); }
+    return Number.isFinite(d) ? d : 3.1;
+  }
+  const echoAmp = r => 0.1 * (0.5 / r) * Math.pow(10, -0.5 * 2 * r / 20); // spreading + ~0.5 dB/m air loss
+  function demoPaths(b) {
+    const c = state.pipe.speed, s = state.pipe.cfg.spacing, d = syntheticDistance(b), d2 = d * 1.38 + 0.15;
+    return [{ delay: (2 * d - s) / c, amp: echoAmp(d) }, { delay: (2 * d2 - s) / c, amp: 0.3 * echoAmp(d2) }];
+  }
+  function demoTick() {
+    if (!state.running || state.mode !== 'demo') return;
+    state.beam = demoBeam(); state.sceneDirty = true;
+    setText('hudOrientation', 'ORIENTATION: SYNTHETIC SWEEP');
+    logAim(state.ring.total);
+    state.ring.push(state.synth.next(demoPaths(state.beam)));
+    runPipeline();
+  }
+  // Stationary laptop in a room: objects (point reflectors) plus walls via image sources.
+  // Coordinates [x right, f forward] in metres, laptop centred; mic deliberately off-centre.
+  const DEMO_ROOM = {
+    mic: -0.06,
+    pts: [{ p: [0.08, 0.95], db: -30 }, { p: [-1.05, 1.55], db: -32 }, { p: [1.25, 1.95], db: -33 }, { p: [-0.35, 2.3], db: -35 }, { p: [0.7, 2.75], db: -36 }],
+    walls: [{ f: 3.3, db: -31 }],
+    sides: [{ x: -2.3, db: -35 }, { x: 2.6, db: -37 }]
+  };
+  function stereoDemoSetup(b, c) {
+    const SL = [-b / 2, 0], SR = [b / 2, 0], M = [DEMO_ROOM.mic, 0], dist = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]);
+    const dL = dist(SL, M), dR = dist(SR, M);
+    const paths = [SL, SR].map((S, v) => {
+      const d = v ? dR : dL, out = [];
+      const add = (r, db, ref) => out.push({ delay: (r - d) / c, amp: Math.pow(10, db / 20) * (2 * ref / r) });
+      for (const o of DEMO_ROOM.pts) add(dist(S, o.p) + dist(o.p, M), o.db, Math.hypot(o.p[0], o.p[1]));
+      for (const w of DEMO_ROOM.walls) add(dist([S[0], 2 * w.f - S[1]], M), w.db, w.f);
+      for (const w of DEMO_ROOM.sides) add(dist([2 * w.x - S[0], S[1]], M), w.db, Math.abs(w.x));
+      return out;
+    });
+    return { dL, dR, paths };
+  }
+  function stereoDemoTick() {
+    if (!state.running || state.mode !== 'demo') return;
+    state.ring.push(state.synth.next(v => state.stereo.demo.paths[v]));
+    runPipeline();
+  }
+
+  // ---------------------------------------------------------------- pipeline glue
+  function buildPipelines(stereo) {
+    const s = settings(), ultra = ui.band.value !== 'audible';
+    if (s.chirpMs + 5 >= s.periodMs) throw Error('Repeat interval must exceed chirp duration by at least 5 ms.');
+    const f1 = ultra ? Math.min(s.f1, state.sr * 0.46) : s.f1;
+    if (s.f0 >= f1 - 500) throw Error(`Sample rate ${state.sr} Hz cannot reproduce this band. Choose the 1–4 kHz audible band.`);
+    state.f0 = s.f0; state.f1 = f1;
+    const base = Object.assign({}, s, { sr: state.sr, f1 });
+    if (!stereo) {
+      state.pipes = [new D.EchoPipeline(base)];
+      // Tag each chirp with the beam it was captured along (motion-aware averaging).
+      state.pipes[0].aimOf = sampleIndex => hasAim() ? aimAt(sampleIndex) : null;
+      state.stereo = null;
+    } else {
+      // Left speaker: up-chirp; right speaker: down-chirp one period later. Each pipeline locks onto
+      // its own chirp every 2 periods; the other chirp barely correlates with its reference.
+      const b = stereoB(), cfg = Object.assign({}, base, { periodMs: 2 * s.periodMs, spacing: b / 2, maxPeaks: 8 });
+      state.pipes = [new D.EchoPipeline(Object.assign({}, cfg, { f0: s.f0, f1 })), new D.EchoPipeline(Object.assign({}, cfg, { f0: f1, f1: s.f0 }))];
+      state.stereo = { b, pairer: new D.StereoPairer(b), frames: [null, null], pairs: [], best: null, m: null, outside: false, pairedAt: 0, demo: null };
+      state.stereo.pairer.minSnrDb = s.thresholdDb + 4; // pairing needs stronger echoes than plain detection
+    }
+    state.pipe = state.pipes[0];
+    state.ring.reset(); state.aimLog.length = 0; state.frame = null; state.profValid = false; state.lastEcho = null;
+    updateBaselineUI(); updateControls();
+    return f1 < s.f1 - 50 ? `Sample rate ${state.sr} Hz limits the sweep to ${Math.round(f1)} Hz.` : '';
+  }
+  const nowMs = () => performance.now();
+  function runPipeline() {
+    for (let i = 0; i < state.pipes.length; i++) {
+      const frames = state.pipes[i].process(state.ring, nowMs);
+      for (const f of frames) state.stereo ? onStereoFrame(f, i) : onFrame(f);
+    }
+  }
+  function trackFrame(f, primary) {
+    state.perf.dsp = state.perf.dsp ? 0.9 * state.perf.dsp + 0.1 * f.dspMs : f.dspMs;
+    if (primary) state.frame = f;
+    if (f.status === 'echo' || f.status === 'noecho') { state.profValid = true; state.profDirty = true; }
+    else if (f.status === 'searching' && primary) { state.profValid = false; state.profDirty = true; }
+    if (f.captureDone && primary) setMessage(state.stereo
+      ? 'Baseline captured. The static room is now subtracted: only things that move or appear will be detected. Clear it to map the room again.'
+      : `Clutter baseline captured from ${BASELINE_CHIRPS} chirps and is now subtracted. Clear it if you change grip or band.`);
+    if (f.capture != null || f.captureDone) updateBaselineUI();
+  }
+  function onFrame(f) {
+    trackFrame(f, true);
+    if (f.echo) {
+      state.lastEcho = f.echo; state.lastEchoAt = performance.now();
+      if (hasAim()) addPoint(f.echo.distance, aimAt(f.direct + state.pipe.L / 2), f.echo.snrDb);
+    }
+  }
+  function onStereoFrame(f, idx) {
+    const st = state.stereo;
+    trackFrame(f, idx === 0);
+    st.frames[idx] = f;
+    const r = st.pairer.push(f, idx, state.pipes[0].P / 2, state.sr, state.pipes[0].speed);
+    if (!r) return;
+    // Only confirmed pairs (seen again within 10 cm in a recent frame) are shown and plotted.
+    const pairs = r.pairs.filter(p => p.confirmed);
+    st.m = r.m; st.outside = r.outside; st.pairs = pairs; st.best = pairs[0] || null; st.pairedAt = performance.now();
+    state.pipes[0].setLive({ spacing: r.dL }); state.pipes[1].setLive({ spacing: r.dR });
+    if (st.best) state.lastEchoAt = performance.now();
+    const el = +ui.elev.value * DEG, maxR = +ui.maxRange.value;
+    for (const p of pairs) {
+      const range = Math.hypot(p.x, p.q);
+      if (range > maxR + 0.3) continue;
+      addXYZ(p.x, p.q * Math.sin(el), -p.q * Math.cos(el), range, p.snrDb);
+    }
+    state.sceneDirty = true;
+  }
+  function updateBaselineUI() {
+    const p = state.pipe;
+    const txt = !p ? 'Off' : p.capture ? `Capturing ${p.capture.count}/${p.capture.target}${state.stereo ? '' : ' — keep sweeping slowly'}` : p.baseline ? `Active · ${p.baseline.count} chirps subtracted` : 'Off';
+    setText('baseState', txt);
+    ui.baseState.className = 'base-state' + (p && p.baseline ? ' on' : p && p.capture ? ' busy' : '');
+  }
+
+  // ---------------------------------------------------------------- audio I/O
+  async function setupCapture(ctx, stream) {
+    state.micSource = ctx.createMediaStreamSource(stream);
+    const onChunk = chunk => { logAim(state.ring.total); state.ring.push(chunk); runPipeline(); };
+    if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+      const code = `class EchoTap extends AudioWorkletProcessor{constructor(){super();this.buf=new Float32Array(1024);this.pos=0;}process(inputs,outputs){const c=inputs[0]&&inputs[0][0];if(c){for(let i=0;i<c.length;i++){this.buf[this.pos++]=c[i];if(this.pos===this.buf.length){const b=this.buf;this.port.postMessage(b,[b.buffer]);this.buf=new Float32Array(1024);this.pos=0;}}}for(const o of outputs)for(const ch of o)ch.fill(0);return true;}}registerProcessor('echo-tap',EchoTap);`;
+      // Blob URLs fail for worklet modules on file:// (opaque origin); a data: URL works there.
+      const blobUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+      const urls = [blobUrl, 'data:text/javascript;charset=utf-8,' + encodeURIComponent(code)];
+      let lastErr = null;
+      for (const url of urls) {
+        try {
+          await ctx.audioWorklet.addModule(url);
+          state.tap = new AudioWorkletNode(ctx, 'echo-tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+          state.tap.port.onmessage = e => onChunk(e.data);
+          state.micSource.connect(state.tap); state.tap.connect(ctx.destination); state.captureType = 'AudioWorklet';
+          URL.revokeObjectURL(blobUrl);
+          return;
+        } catch (e) {
+          lastErr = e;
+          if (state.tap) { try { state.tap.disconnect(); } catch (_) { } state.tap = null; }
+        }
+      }
+      URL.revokeObjectURL(blobUrl);
+      console.warn('AudioWorklet unavailable; using ScriptProcessor fallback.', lastErr);
+    }
+    if (typeof ctx.createScriptProcessor === 'function') {
+      state.tap = ctx.createScriptProcessor(2048, 1, 1);
+      state.tap.onaudioprocess = e => { onChunk(e.inputBuffer.getChannelData(0).slice()); e.outputBuffer.getChannelData(0).fill(0); };
+      state.micSource.connect(state.tap); state.tap.connect(ctx.destination); state.captureType = 'ScriptProcessor fallback';
+      return;
+    }
+    throw Error('This browser offers no continuous microphone capture (AudioWorklet/ScriptProcessor).');
+  }
+  function outputBuffer(ctx) {
+    const P = Math.round(state.sr * +ui.period.value / 1000);
+    if (!state.stereo) { const buf = ctx.createBuffer(1, P, state.sr); buf.getChannelData(0).set(state.pipes[0].chirp); return buf; }
+    const buf = ctx.createBuffer(2, 2 * P, state.sr);
+    buf.getChannelData(0).set(state.pipes[0].chirp, 0);   // left: up-chirp
+    buf.getChannelData(1).set(state.pipes[1].chirp, P);   // right: down-chirp, one period later
+    return buf;
+  }
+  async function requestWakeLock() {
+    try { if (navigator.wakeLock && !state.wakeLock) state.wakeLock = await navigator.wakeLock.request('screen'); } catch (_) { state.wakeLock = null; }
+  }
+
+  async function startScan(forceMode) {
+    if (state.running || state.busy) return;
+    state.busy = true; ui.startBtn.disabled = true; ui.startBtn.textContent = 'Starting…';
+    state.mode = forceMode || (ui.demo.checked ? 'demo' : 'live');
+    const stereo = aimMode() === 'stereo';
+    state.sensorsSeen = false; state.zeroQuat = null; state.relative = { alpha: 0, beta: 0, gamma: 0 }; state.beam = [0, 0, -1]; state.demoStep = 0;
+    const key = state.mode + (stereo ? ':stereo' : '');
+    if (state.points.length && state.cloudKey !== key) clearCloud();
+    // Stereo output is a flat map: look down on it with "forward" pointing up the screen.
+    const wasStereo = !!(state.cloudKey && state.cloudKey.endsWith(':stereo'));
+    if (stereo && (!wasStereo || state.cloudKey !== key)) Object.assign(state.camera, { yaw: 0, pitch: 1.2, dist: 7.5, tz: -1.7 });
+    if (!stereo && wasStereo) Object.assign(state.camera, { yaw: -0.6, pitch: 0.29, dist: 8.2, tz: 0 });
+    state.cloudKey = key;
+    const sensorPromise = state.mode === 'live' && aimMode() === 'sensors' ? requestSensors() : Promise.resolve();
+    let startupError = null, note = '';
+    try {
+      if (state.mode === 'live') {
+        if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+          throw Error('Microphone API unavailable. Open this page over HTTPS or from localhost / a local file — not inside a sandboxed preview.');
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) throw Error('Web Audio API unavailable in this browser.');
+        try { state.ctx = new AudioCtx({ latencyHint: 'interactive', sampleRate: 48000 }); } catch (_) { state.ctx = new AudioCtx({ latencyHint: 'interactive' }); }
+        state.sr = state.ctx.sampleRate;
+        note = buildPipelines(stereo);
+        if (stereo && state.ctx.destination.maxChannelCount < 2) throw Error('The audio output is mono, so the two speakers cannot be driven separately. Use built-in stereo speakers.');
+        // Start the chirp inside the tap, before asking for the mic: satisfies iOS autoplay rules and,
+        // on some iOS versions, keeps output on the loudspeaker instead of moving it to the earpiece.
+        state.gain = state.ctx.createGain(); state.gain.gain.value = +ui.volume.value / 100; state.gain.connect(state.ctx.destination);
+        state.source = state.ctx.createBufferSource(); state.source.buffer = outputBuffer(state.ctx); state.source.loop = true; state.source.connect(state.gain);
+        state.source.start(state.ctx.currentTime + 0.03);
+        const resumePromise = state.ctx.resume();
+        state.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false, voiceIsolation: false }, video: false });
+        await resumePromise;
+        if (state.ctx.state !== 'running') { try { await state.ctx.resume(); } catch (_) { } }
+        if (state.ctx.state !== 'running') throw Error('Browser suspended audio output. Enable sound for this site (and turn off silent mode on iPhone) and try again.');
+        state.usedMic = true;
+        await setupCapture(state.ctx, state.stream);
+        state.ctx.onstatechange = () => { if (state.running && state.ctx && state.ctx.state !== 'running') setMessage('Audio was interrupted by the system (' + state.ctx.state + '). Return to the page or tap Start again.', 'warn'); };
+        requestWakeLock();
+      } else {
+        state.sr = 48000; note = buildPipelines(stereo);
+        const c = state.pipe.speed, common = { sr: state.sr, f0: state.f0, f1: state.f1, chirpMs: +ui.duration.value, periodMs: +ui.period.value, seed: (Math.random() * 1e9) | 0 };
+        if (stereo) {
+          const demo = state.stereo.demo = stereoDemoSetup(state.stereo.b, c);
+          state.synth = new D.SyntheticStream(Object.assign(common, {
+            variants: [{ f0: state.f0, f1: state.f1 }, { f0: state.f1, f1: state.f0, offset: (demo.dR - demo.dL) / c * state.sr, gain: Math.sqrt(demo.dL / demo.dR) }]
+          }));
+          state.timer = setInterval(stereoDemoTick, Math.max(16, +ui.period.value / DEMO_SPEED));
+        } else {
+          const sp = state.pipe.cfg.spacing;
+          state.synth = new D.SyntheticStream(Object.assign(common, {
+            staticPaths: [{ delay: (2 * 0.42 - sp) / c, amp: Math.pow(10, -40 / 20) }, { delay: (2 * 1.55 - sp) / c, amp: Math.pow(10, -52 / 20) }]
+          }));
+          state.timer = setInterval(demoTick, Math.max(16, +ui.period.value / DEMO_SPEED));
+        }
+        state.captureType = 'synthetic stream';
+      }
+      state.running = true; lockSignal(true);
+      ui.startBtn.classList.add('running'); ui.startBtn.textContent = '■ Stop scan'; setMobileStart(true);
+      markStatus(state.mode === 'demo' ? 'SIMULATING' : 'SCANNING', state.mode === 'demo' ? 'demo' : 'live');
+      setText('hudMode', state.mode === 'demo' ? 'SOURCE: SYNTHETIC ECHOES' : stereo ? 'SOURCE: L+R SPEAKERS + MICROPHONE' : 'SOURCE: SPEAKER + MICROPHONE');
+      setText('samplerate', (state.sr / 1000).toFixed(1) + ' kHz');
+      setText('deviceState', state.mode === 'demo' ? 'SIMULATED' : 'ACQUIRING');
+      if (stereo) setText('hudOrientation', 'GEOMETRY: STEREO TRIANGULATION');
+      else if (state.mode === 'live' && manualMode()) manualBeam(); else if (state.mode === 'live') setText('hudOrientation', 'ORIENTATION: WAITING');
+      if (state.mode === 'demo' && stereo) setMessage(`SIMULATION: a stationary laptop with two speakers in a synthetic room (5 objects, back and side walls; mic ${Math.abs(DEMO_ROOM.mic * 100)} cm left of centre). Same pipelines as live stereo mode, ${DEMO_SPEED}× speed.`, 'warn');
+      else if (state.mode === 'demo') setMessage(`SIMULATION: synthetic room with realistic echo levels (about −32 to −43 dB re direct), phone self-response, reverberation, noise and clock drift, processed by the same streaming pipeline as live mode at ${DEMO_SPEED}× speed. No microphone or speaker used.`, 'warn');
+      else if (note) setMessage(note + ' Expect reduced high-frequency performance.', 'warn');
+      else if (state.captureType !== 'AudioWorklet') setMessage('Live scanning with ' + state.captureType + ' capture (AudioWorklet unavailable).', 'warn');
+      else if (stereo) setMessage('Stereo scan active: the left speaker sends up-chirps and the right speaker down-chirps, alternately. Keep the laptop still; it learns where the mic sits within about a second. Hard objects 0.5–3 m away show up best.');
+      else setMessage('Live scan active. Hold still for a second while the chirp locks, then sweep slowly. Use “Capture baseline” while sweeping to remove your hand/body and phone self-echoes.');
+      await sensorPromise;
+      if (state.mode === 'live' && aimMode() === 'sensors') {
+        setTimeout(() => { if (state.running && !state.sensorsSeen && aimMode() === 'sensors') setMessage('Audio scan active, but no orientation values arrived, so echoes are range-only. On a laptop choose “Laptop stereo speakers”; on a phone allow Motion & Orientation access.', 'warn'); }, 3500);
+      }
+    } catch (e) {
+      startupError = e; console.error('Start failed', e); await stopScan();
+      const msg = e.name === 'NotAllowedError' ? 'Microphone permission denied. Allow microphone access for this page in site settings and retry.'
+        : e.name === 'NotFoundError' ? 'No microphone was found on this device.'
+          : e.name === 'NotReadableError' ? 'Microphone is unavailable or in use by another app.' : (e.message || String(e));
+      setMessage(msg, 'error'); markStatus('ERROR');
+    } finally {
+      state.busy = false; ui.startBtn.disabled = false;
+      if (!state.running) { ui.startBtn.textContent = '▶ Start scan'; ui.startBtn.classList.remove('running'); setMobileStart(false); }
+      if (startupError) setText('deviceState', 'ERROR');
+    }
+  }
+  async function stopScan() {
+    state.running = false;
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    if (state.source) { try { state.source.stop(); } catch (_) { } try { state.source.disconnect(); } catch (_) { } state.source = null; }
+    if (state.tap) { try { state.tap.disconnect(); } catch (_) { } if ('port' in state.tap) try { state.tap.port.onmessage = null; state.tap.port.close(); } catch (_) { } state.tap = null; }
+    if (state.micSource) { try { state.micSource.disconnect(); } catch (_) { } state.micSource = null; }
+    if (state.gain) { try { state.gain.disconnect(); } catch (_) { } state.gain = null; }
+    if (state.stream) { for (const t of state.stream.getTracks()) t.stop(); state.stream = null; }
+    if (state.ctx) { state.ctx.onstatechange = null; try { await state.ctx.close(); } catch (_) { } state.ctx = null; }
+    if (state.wakeLock) { try { await state.wakeLock.release(); } catch (_) { } state.wakeLock = null; }
+    // iOS can stay in play-and-record (earpiece, low fidelity) after the mic closes; nudge it back.
+    if (state.usedMic && navigator.audioSession) { try { navigator.audioSession.type = 'playback'; navigator.audioSession.type = 'auto'; } catch (_) { } }
+    state.usedMic = false; state.synth = null;
+    lockSignal(false); ui.startBtn.classList.remove('running'); ui.startBtn.textContent = '▶ Start scan'; setMobileStart(false); markStatus('STANDBY');
+    setText('deviceState', 'STOPPED'); setText('hudMode', 'SOURCE: INACTIVE'); state.sceneDirty = true; updateBaselineUI();
+  }
+
+  // ---------------------------------------------------------------- rendering (dirty-flag, batched)
+  const g = ui.scene.getContext('2d', { alpha: false }), pg = ui.profile.getContext('2d', { alpha: false });
+  let W = 0, H = 0, DPR = 1, PW = 0, PH = 0, bgGrad = null;
+  const NB = 12, BUCKET_COLORS = [], buckets = [];
+  for (let k = 0; k < NB; k++) {
+    const t = (k + 0.5) / NB;
+    BUCKET_COLORS.push(`rgba(${Math.round(58 + 88 * t)},${Math.round(235 - 55 * t)},${Math.round(215 + 35 * t)},.92)`);
+    buckets.push([]);
+  }
+  const GRID = []; // precomputed grid segments in world space
+  for (let v = -3.5; v <= 3.51; v += 0.5) { GRID.push([v, -1.65, -3.5, v, -1.65, 3.5], [-3.5, -1.65, v, 3.5, -1.65, v]); }
+  function resize() {
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    const r = ui.viewport.getBoundingClientRect(); W = Math.max(1, r.width); H = Math.max(1, r.height);
+    ui.scene.width = Math.round(W * DPR); ui.scene.height = Math.round(H * DPR); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    bgGrad = g.createRadialGradient(W * 0.5, H * 0.42, 8, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
+    bgGrad.addColorStop(0, '#14324d91'); bgGrad.addColorStop(1, '#09172700');
+    const pr = ui.profile.getBoundingClientRect(); PW = Math.max(1, pr.width); PH = Math.max(1, pr.height);
+    ui.profile.width = Math.round(PW * DPR); ui.profile.height = Math.round(PH * DPR); pg.setTransform(DPR, 0, 0, DPR, 0, 0);
+    state.sceneDirty = true; state.profDirty = true;
+  }
+  let cam = null;
+  function camSetup() {
+    const c = state.camera;
+    cam = { cy: Math.cos(c.yaw), sy: Math.sin(c.yaw), cp: Math.cos(c.pitch), sp: Math.sin(c.pitch), dist: c.dist, tz: c.tz || 0, k: Math.min(W, H) * 1.32, cx: W * 0.5, cyy: H * 0.52 };
+  }
+  // Projects into out[0..2] = screen x, y, scale; returns false when behind the camera.
+  const P3 = [0, 0, 0];
+  function proj(x, y, z, out) {
+    z -= cam.tz; // orbit target (stereo map is centred ahead of the laptop)
+    const X = cam.cy * x + cam.sy * z, Z = -cam.sy * x + cam.cy * z, Y = cam.cp * y - cam.sp * Z, depth = cam.dist + cam.sp * y + cam.cp * Z;
+    if (depth < 0.4) return false;
+    const s = cam.k / depth; out[0] = cam.cx + X * s; out[1] = cam.cyy - Y * s; out[2] = s; return true;
+  }
+  function seg(x1, y1, z1, x2, y2, z2) {
+    if (!proj(x1, y1, z1, P3)) return; const ax = P3[0], ay = P3[1];
+    if (!proj(x2, y2, z2, P3)) return; g.moveTo(ax, ay); g.lineTo(P3[0], P3[1]);
+  }
+  function rebuildLinks() {
+    const L = state.links; L.length = 0;
+    for (const [key, a] of state.cells) {
+      for (const b of [state.cells.get(key + 1024), state.cells.get(key + 1)]) {
+        if (b && Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 0.37) L.push(a, b);
+      }
+    }
+    state.linksDirty = false;
+  }
+  function drawScene() {
+    const t0 = performance.now();
+    camSetup();
+    g.fillStyle = '#091727'; g.fillRect(0, 0, W, H); g.fillStyle = bgGrad; g.fillRect(0, 0, W, H);
+    g.beginPath(); for (const s of GRID) seg(s[0], s[1], s[2], s[3], s[4], s[5]);
+    g.strokeStyle = '#1b334766'; g.lineWidth = 0.65; g.stroke();
+    g.lineWidth = 1.3;
+    g.beginPath(); seg(0, 0, 0, 1, 0, 0); g.strokeStyle = '#ff8a857b'; g.stroke();
+    g.beginPath(); seg(0, 0, 0, 0, 1, 0); g.strokeStyle = '#89e2a07b'; g.stroke();
+    g.beginPath(); seg(0, 0, 0, 0, 0, -1); g.strokeStyle = '#6cafff9c'; g.stroke();
+    const pts = state.points, maxR = +ui.maxRange.value;
+    for (const b of buckets) b.length = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      p.vis = proj(p.x, p.y, p.z, P3);
+      if (!p.vis) continue;
+      p.sx = P3[0]; p.sy = P3[1]; p.sr = Math.max(1, Math.min(3.6, 2.3 * P3[2] / 70));
+      buckets[Math.min(NB - 1, (p.range / maxR * NB) | 0)].push(p);
+    }
+    if (state.linksDirty) rebuildLinks();
+    const L = state.links;
+    if (L.length) {
+      g.beginPath();
+      for (let i = 0; i < L.length; i += 2) { const a = L[i], b = L[i + 1]; if (a.vis && b.vis) { g.moveTo(a.sx, a.sy); g.lineTo(b.sx, b.sy); } }
+      g.strokeStyle = '#39b9c12b'; g.lineWidth = 0.65; g.stroke();
+    }
+    for (let k = 0; k < NB; k++) {
+      const b = buckets[k]; if (!b.length) continue;
+      g.beginPath();
+      for (const p of b) { g.moveTo(p.sx + p.sr, p.sy); g.arc(p.sx, p.sy, p.sr, 0, 6.2832); }
+      g.fillStyle = BUCKET_COLORS[k]; g.fill();
+    }
+    const st = state.stereo, demo = state.mode === 'demo';
+    if (st) {
+      // Speakers (squares) and the learned mic position (dot) on the laptop axis.
+      for (const x of [-st.b / 2, st.b / 2]) if (proj(x, 0, 0, P3)) { g.fillStyle = '#f4bd70'; g.fillRect(P3[0] - 3.5, P3[1] - 3.5, 7, 7); }
+      if (st.m != null && proj(st.m, 0, 0, P3)) { g.beginPath(); g.arc(P3[0], P3[1], 3.5, 0, 6.2832); g.fillStyle = '#82ffed'; g.fill(); }
+      if (state.running && performance.now() - st.pairedAt < 1500 && st.pairs.length) {
+        const el = +ui.elev.value * DEG; g.beginPath();
+        for (const p of st.pairs) seg(st.m || 0, 0, 0, p.x, p.q * Math.sin(el), -p.q * Math.cos(el));
+        g.strokeStyle = demo ? '#f3be7666' : '#57e9cf66'; g.lineWidth = 1; g.stroke();
+      }
+    } else if (state.running) {
+      const v = state.beam, recent = state.lastEcho && performance.now() - state.lastEchoAt < 1500;
+      const len = recent ? state.lastEcho.distance : 2.4;
+      g.beginPath(); seg(0, 0, 0, v[0] * len, v[1] * len, v[2] * len);
+      g.strokeStyle = demo ? '#f3be768f' : '#57e9cf9e'; g.lineWidth = 1.2; g.stroke();
+      if (proj(v[0] * len, v[1] * len, v[2] * len, P3)) {
+        g.beginPath(); g.arc(P3[0], P3[1], 7, 0, 6.2832); g.strokeStyle = demo ? '#f6bf7dbb' : '#68ffdbbb'; g.lineWidth = 1; g.stroke();
+      }
+    }
+    const dt = performance.now() - t0;
+    state.perf.draw = state.perf.draw ? 0.9 * state.perf.draw + 0.1 * dt : dt;
+    state.perf.redraws = (state.perf.redraws || 0) + 1;
+  }
+
+  // A-scan: echo power vs range (dB re direct path) with the CFAR threshold. In stereo mode both
+  // channels are drawn (range axis = half the speaker→reflector→mic path).
+  function drawProfile() {
+    const c = pg, w = PW, h = PH, left = 30, bottom = 16, top = 6, pw = w - left - 6, ph = h - bottom - top;
+    c.fillStyle = '#081b2a'; c.fillRect(0, 0, w, h);
+    const maxR = +ui.maxRange.value, minDb = -80, maxDb = 0;
+    const X = r => left + clamp(r / maxR, 0, 1) * pw, Y = db => top + (1 - clamp((db - minDb) / (maxDb - minDb), 0, 1)) * ph;
+    c.font = '9px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
+    c.strokeStyle = '#1d3a50'; c.lineWidth = 1; c.fillStyle = '#6f8fa6';
+    c.beginPath();
+    for (let db = -80; db <= 0; db += 20) { const y = Math.round(Y(db)) + 0.5; c.moveTo(left, y); c.lineTo(left + pw, y); }
+    for (let r = 1; r <= maxR; r += 1) { const x = Math.round(X(r)) + 0.5; c.moveTo(x, top); c.lineTo(x, top + ph); }
+    c.stroke();
+    c.textAlign = 'right'; for (let db = -80; db <= 0; db += 20) c.fillText(String(db), left - 4, Y(db));
+    c.textAlign = 'center'; c.textBaseline = 'alphabetic'; for (let r = 0; r <= maxR; r += 1) c.fillText(r + ' m', clamp(X(r), left + 8, left + pw - 10), h - 4);
+    const f = state.frame;
+    if (!state.pipes.length || !f) { setText('corrNote', state.running ? 'ACQUIRING' : 'AWAITING SIGNAL'); return; }
+    const p0 = state.pipes[0];
+    const minR = ((p0.minLag) / p0.cfg.sr * p0.speed + p0.cfg.spacing) / 2;
+    c.fillStyle = '#ffffff09'; c.fillRect(left, top, X(minR) - left, ph);
+    if (!state.profValid) { setText('corrNote', 'NO CHIRP LOCK'); return; }
+    const cols = Math.max(2, Math.floor(pw)), dbAt = v => 10 * Math.log10(Math.max(v, 1e-12));
+    const drawSeries = (p, arr, style, dash) => {
+      const sr = p.cfg.sr, sp = p.cfg.spacing, speed = p.speed, pre = p.pre, last = Math.min(p.profLen - 1, pre + p.maxLagLive);
+      const rangeAt = m => ((m - pre) / sr * speed + sp) / 2;
+      c.beginPath(); let started = false, colMax = -Infinity, prevCol = -1;
+      const flush = col => { if (colMax === -Infinity) { started = false; return; } const x = left + col * pw / cols, y = Y(dbAt(colMax)); if (!started) { c.moveTo(x, y); started = true; } else c.lineTo(x, y); };
+      for (let m = pre; m <= last; m++) {
+        const col = Math.floor((rangeAt(m) / maxR) * cols); if (col < 0) continue; if (col >= cols) break;
+        if (col !== prevCol) { if (prevCol >= 0) flush(prevCol); colMax = -Infinity; prevCol = col; }
+        const v = arr[m]; if (Number.isFinite(v) && v > colMax) colMax = v;
+      }
+      if (prevCol >= 0) flush(prevCol);
+      c.strokeStyle = style; c.lineWidth = dash ? 1 : 1.3; c.setLineDash(dash ? [4, 3] : []); c.stroke(); c.setLineDash([]);
+    };
+    const st = state.stereo;
+    drawSeries(p0, p0.thr, '#f4bd70b0', true);
+    if (st && state.pipes[1]) drawSeries(state.pipes[1], state.pipes[1].pow, '#a78bfacc', false);
+    drawSeries(p0, p0.pow, '#39e2d0', false);
+    const marks = st ? [] : (f.peaks || []);
+    marks.forEach((q, i) => {
+      const x = X(q.distance), y = Y(q.levelDb);
+      c.beginPath(); c.arc(x, y, i ? 2.5 : 3.5, 0, 6.2832); c.fillStyle = i ? '#f4bd7099' : '#f4c07b'; c.fill();
+      if (!i) {
+        c.strokeStyle = '#f4c07b66'; c.beginPath(); c.moveTo(Math.round(x) + 0.5, top); c.lineTo(Math.round(x) + 0.5, top + ph); c.stroke();
+        c.fillStyle = '#ffe1b8'; c.textAlign = x > left + pw * 0.7 ? 'right' : 'left'; c.textBaseline = 'top';
+        c.fillText(`${q.distance.toFixed(2)} m · ${q.snrDb.toFixed(0)} dB SNR`, x + (x > left + pw * 0.7 ? -6 : 6), top + 2);
+      }
+    });
+    if (st) {
+      c.textAlign = 'right'; c.textBaseline = 'top'; c.fillStyle = '#9fb3c8';
+      c.fillText('L (up-chirp) teal · R (down-chirp) violet · x = half path', left + pw - 4, top + 2);
+      setText('corrNote', st.pairs.length ? `${st.pairs.length} ECHO PAIR${st.pairs.length > 1 ? 'S' : ''} TRIANGULATED` : 'LOCKED · NO CONSISTENT PAIR');
+    } else setText('corrNote', f.echo ? 'ECHO ACCEPTED' : 'LOCKED · NO ECHO ABOVE THRESHOLD');
+  }
+
+  // ---------------------------------------------------------------- telemetry text (≤10 Hz, change-only)
+  function updateTexts() {
+    const f = state.frame, running = state.running, st = state.stereo;
+    setText('hudPerf', `DSP ${fmt(state.perf.dsp, 2)} ms/chirp · DRAW ${fmt(state.perf.draw, 2)} ms`);
+    {
+      const ok = x => x && (x.status === 'echo' || x.status === 'noecho');
+      let line = 'ECHO: —';
+      if (running && !f) line = 'ECHO: ACQUIRING';
+      else if (running && st) line = !ok(f) || !ok(st.frames[1]) ? 'ECHO: LOCKING L/R CHIRPS' : st.best ? `ECHO: ${st.pairs.length} REFLECTOR${st.pairs.length > 1 ? 'S' : ''} · ${fmt(Math.hypot(st.best.x, st.best.q), 2)} m` : 'ECHO: NONE ABOVE THRESHOLD';
+      else if (running) line = f.status === 'searching' ? 'ECHO: SEARCHING FOR CHIRP' : f.echo ? `ECHO: ${fmt(f.echo.distance, 2)} m · ${fmt(f.echo.snrDb, 0)} dB SNR` : ok(f) ? 'ECHO: NONE ABOVE THRESHOLD' : 'ECHO: CHIRP DROPOUT';
+      setText('hudEcho', line);
+    }
+    setText('dspLoad', state.perf.dsp ? fmt(state.perf.dsp, 2) + ' ms' : '—');
+    setText('angA', st ? 'AZIMUTH' : 'REL YAW'); setText('angB', st ? 'ELEV (SET)' : 'PITCH'); setText('angC', st ? 'MIC OFFSET' : 'ROLL');
+    setText('micOffset', st && st.m != null ? `${sgn(st.m * 100, 1)} cm (learned)` : 'learned at start');
+    if (!f) return;
+    setText('micLevel', f.micRms > 0 ? fmt(20 * Math.log10(f.micRms), 1) + ' dBFS' : '—');
+    const ok = x => x && (x.status === 'echo' || x.status === 'noecho');
+    const locked = ok(f);
+    setText('directLevel', locked ? fmt(f.directDb, 1) + ' dBFS' : '—');
+    if (st) {
+      const fr = st.frames[1], b = st.best;
+      setText('directSnr', `L ${ok(f) ? fmt(f.directSnrDb, 0) : '—'} / R ${ok(fr) ? fmt(fr.directSnrDb, 0) : '—'} dB above floor`);
+      const az = b ? Math.atan2(b.x, b.q) / DEG : NaN, c = state.pipes[0].speed;
+      setText('distance', b ? fmt(Math.hypot(b.x, b.q), 2) + ' m' : '—'); setText('distanceNote', b ? `Azimuth ${sgn(az, 0)}° from straight ahead` : 'Strongest triangulated pair');
+      setText('tof', b ? `${fmt((b.rL - (st.b / 2 + st.m)) / c * 1000, 2)}/${fmt((b.rR - (st.b / 2 - st.m)) / c * 1000, 2)}` : '—'); setText('tofNote', 'L / R ms after direct');
+      setText('quality', b ? fmt(b.snrDb, 1) + ' dB' : '—'); setText('echoLevel', b ? fmt(b.levelDb, 1) + ' dBFS' : '—'); setText('echoLevelNote', 'Absolute, mean of L and R');
+      if (running) { setText('yaw', b ? sgn(az, 0) + '°' : '—'); setText('pitch', ui.elev.value + '°'); setText('roll', st.m != null ? sgn(st.m * 100, 1) + ' cm' : '—'); }
+      const status = !ok(f) || !ok(fr) ? `${ok(f) ? 'L LOCKED' : 'L SEARCHING'} · ${ok(fr) ? 'R LOCKED' : 'R SEARCHING'}` : st.pairs.length ? `${st.pairs.length} REFLECTOR${st.pairs.length > 1 ? 'S' : ''} · AZ ${sgn(az, 0)}°` : 'BOTH LOCKED · NO PAIR';
+      setText('detectState', status);
+      if (running) setText('deviceState', state.mode === 'demo' ? 'SIMULATED' : ok(f) && ok(fr) ? 'L+R LOCKED' : 'ACQUIRING');
+      let diag;
+      if (state.mode !== 'demo' && f.micRms < 1e-4) diag = 'Microphone stream is nearly silent. Check the selected input device and microphone permission.';
+      else if (state.mode !== 'demo' && f.clipFrac > 0.001) diag = 'Microphone input is clipping. Lower the speaker gain.';
+      else if (!ok(f) || !ok(fr)) diag = `${!ok(f) && !ok(fr) ? 'Neither chirp' : !ok(f) ? 'The left (up) chirp' : 'The right (down) chirp'} is not being found. Stereo mode needs two separately driven speakers (built-in laptop speakers; not mono, Bluetooth headsets or an external mono speaker). If neither locks, try the 15–20 kHz or 1–4 kHz band.`;
+      else if (st.outside) diag = 'Direct-path timing suggests the mic is not between the speakers, or the speaker spacing is set too small. Measure the distance between the two speaker grille centres and set it before starting.';
+      else if (!st.pairs.length) diag = `Both chirps locked. No echo is consistent with both speakers above the ${ui.threshold.value} dB threshold. Hard, flat objects 0.5–3 m away (a monitor, a box, a wall) work best; try lowering the threshold.`;
+      else diag = `${st.pairs.length} reflector${st.pairs.length > 1 ? 's' : ''} placed; strongest ${fmt(Math.hypot(b.x, b.q), 2)} m at ${sgn(az, 0)}°. Left–right comes from the path difference between speakers (≈ ±${fmt(Math.atan2(0.02, st.b) / DEG, 0)}° per 2 cm of range error). Up/down and in-front/behind cannot be told apart with speakers in a line, so points are drawn on one forward plane at the set elevation.`;
+      setText('diagnostic', state.mode === 'demo' ? 'Synthetic stereo capture → same two pipelines, pairing and triangulation as live stereo mode. ' + diag : diag);
+      return;
+    }
+    if (running) { setText('yaw', fmt(state.relative.alpha, 0) + '°'); setText('pitch', fmt(state.relative.beta, 0) + '°'); setText('roll', fmt(state.relative.gamma, 0) + '°'); }
+    setText('directSnr', locked ? fmt(f.directSnrDb, 0) + ' dB above floor' : 'not locked');
+    const e = f.echo;
+    setText('tof', e ? fmt(e.delay * 1000, 2) + ' ms' : '—'); setText('tofNote', 'After direct arrival');
+    setText('distance', e ? fmt(e.distance, 2) + ' m' : '—'); setText('distanceNote', '(delay·c + spacing) / 2');
+    setText('quality', e ? fmt(e.snrDb, 1) + ' dB' : '—'); setText('echoLevel', e ? fmt(e.levelDb, 1) + ' dB' : '—'); setText('echoLevelNote', 'Re direct path');
+    const status = f.status === 'searching' ? 'SEARCHING FOR CHIRP' : f.status === 'dropout' ? 'CHIRP DROPOUT' : f.status === 'noecho' ? 'LOCKED · NO ECHO' : hasAim() ? (manualMode() && state.mode !== 'demo' ? 'ECHO · ON ASSUMED LINE' : 'ECHO ACCEPTED') : 'RANGE ONLY · NO AIM';
+    setText('detectState', status);
+    if (running) setText('deviceState', state.mode === 'demo' ? 'SIMULATED' : locked ? 'LOCKED' : 'ACQUIRING');
+    let diag;
+    if (state.mode === 'demo') diag = 'Synthetic capture → same matched filter, lock, averaging and CFAR as live mode. The 3D points are NOT measurements of your room.';
+    else if (f.micRms < 1e-4) diag = 'Microphone stream is nearly silent. Check the selected input device and microphone permission.';
+    else if (f.clipFrac > 0.001) diag = 'Microphone input is clipping. Lower the speaker gain.';
+    else if (f.status === 'searching') diag = `Audio is arriving but the transmitted chirp is not found (direct ${fmt(f.directSnrDb, 0)} dB above floor; needs 15). Many speakers/mics cannot do 18–22 kHz: try 15–20 kHz or 1–4 kHz, raise gain slightly, and keep the speaker and mic uncovered.`;
+    else if (f.status === 'dropout') diag = 'The chirp lock dropped for a moment (blocked speaker, loud transient, or gain change).';
+    else if (!e) diag = `Chirp locked (direct path ${fmt(f.directSnrDb, 0)} dB above floor). No echo exceeds the ${ui.threshold.value} dB threshold between ${(+ui.minRange.value).toFixed(2)} and ${(+ui.maxRange.value).toFixed(1)} m. Aim at a hard flat surface 0.5–3 m away, square-on, or lower the threshold.`;
+    else if (!hasAim()) diag = 'Echo detected but there is no orientation (sensor or manual aim), so it is range-only and not added to 3D. On a laptop choose “Laptop stereo speakers”.';
+    else if (manualMode()) diag = `Echo at ${fmt(e.distance, 2)} m. Manual aiming draws every echo on the slider line because a stationary device cannot sense direction — different distances along one line are different reflectors. For a 2D map on a laptop choose “Laptop stereo speakers”.`;
+    else diag = `Echo at ${fmt(e.distance, 2)} m, ${fmt(e.snrDb, 0)} dB above the local floor (${fmt(e.levelDb, 0)} dB re direct). Range and point cloud are estimates, not calibrated measurements.`;
+    setText('diagnostic', diag);
+  }
+
+  function loop(ts) {
+    requestAnimationFrame(loop);
+    if (state.sceneDirty) { state.sceneDirty = false; drawScene(); }
+    if (state.profDirty) { state.profDirty = false; drawProfile(); }
+    if (ts - state.lastUi > 100) { state.lastUi = ts; updateTexts(); }
+  }
+
+  // ---------------------------------------------------------------- input
+  function pointerDown(e) { ui.viewport.setPointerCapture(e.pointerId); state.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); }
+  function pointerMove(e) {
+    if (!state.pointers.has(e.pointerId)) return;
+    const old = state.pointers.get(e.pointerId), now = { x: e.clientX, y: e.clientY }; state.pointers.set(e.pointerId, now);
+    if (state.pointers.size === 1) {
+      state.camera.yaw += (now.x - old.x) * 0.007; state.camera.pitch = clamp(state.camera.pitch + (now.y - old.y) * 0.007, -1.35, 1.35); state.gesture = null;
+    } else if (state.pointers.size === 2) {
+      const a = [...state.pointers.values()], dist = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
+      if (state.gesture && dist > 1) state.camera.dist = clamp(state.camera.dist * state.gesture / dist, 2.5, 18);
+      state.gesture = dist;
+    }
+    state.sceneDirty = true;
+  }
+  function pointerUp(e) { state.pointers.delete(e.pointerId); state.gesture = null; }
+  ui.viewport.addEventListener('pointerdown', pointerDown); ui.viewport.addEventListener('pointermove', pointerMove);
+  ui.viewport.addEventListener('pointerup', pointerUp); ui.viewport.addEventListener('pointercancel', pointerUp);
+  ui.viewport.addEventListener('wheel', e => { e.preventDefault(); state.camera.dist = clamp(state.camera.dist + e.deltaY * 0.007, 2.5, 18); state.sceneDirty = true; }, { passive: false });
+  ui.startBtn.addEventListener('click', () => { if (state.running) { stopScan(); setMessage('Scan stopped. The point cloud stays available to inspect and export.'); } else startScan(); });
+  // The demo button is self-contained: it does not flip the Simulation toggle, so "Start scan" stays live.
+  ui.quickDemo.addEventListener('click', async () => { if (state.busy) return; if (state.running) await stopScan(); await startScan('demo'); });
+  ui.aimMode.addEventListener('change', () => {
+    updateAimMode();
+    if (!state.running && aimMode() === 'manual') setMessage('Manual aiming: every echo is drawn along the yaw/pitch you set. A laptop that is not moving cannot sense direction, so you will see points on one line. Use it while physically turning the device, or pick “Laptop stereo speakers” for a 2D map.');
+    if (!state.running && aimMode() === 'stereo') setMessage('Laptop stereo speakers: set the distance between your two speaker grilles, put the laptop on a desk facing the room, and press Start scan. It learns the mic position by itself.');
+  });
+  ui.aimYaw.addEventListener('input', updateAimMode); ui.aimPitch.addEventListener('input', updateAimMode);
+  ui.elev.addEventListener('input', updateControls); ui.spkSpacing.addEventListener('input', updateControls);
+  ui.axis.addEventListener('change', () => { if (state.sensorsSeen && state.mode !== 'demo') sensorBeam(); state.sceneDirty = true; });
+  ui.volume.addEventListener('input', () => { updateControls(); if (state.gain && state.ctx) state.gain.gain.setTargetAtTime(+ui.volume.value / 100, state.ctx.currentTime, 0.03); });
+  for (const el of [ui.duration, ui.period, ui.band, ui.maxRange]) el.addEventListener('input', () => { updateControls(); state.profDirty = true; });
+  for (const el of [ui.threshold, ui.average, ui.minRange, ui.spacing, ui.temp]) el.addEventListener('input', () => {
+    updateControls(); for (const p of state.pipes) p.setLive(liveSettings());
+    if (state.stereo) state.stereo.pairer.minSnrDb = +ui.threshold.value + 4;
+    state.profDirty = true;
+  });
+  ui.baseBtn.addEventListener('click', () => {
+    if (!state.pipes.length || !state.running) return;
+    for (const p of state.pipes) p.startBaseline(BASELINE_CHIRPS);
+    updateBaselineUI();
+    setMessage(state.stereo ? 'Capturing a baseline of the static room (keep everything still)…'
+      : state.mode === 'demo' ? 'Capturing clutter baseline from the synthetic sweep…'
+        : 'Capturing clutter baseline: keep your grip unchanged and sweep the phone slowly across the room for ~2 s so that room echoes average out.');
+  });
+  ui.baseClear.addEventListener('click', () => { for (const p of state.pipes) p.clearBaseline(); updateBaselineUI(); setMessage('Baseline cleared.'); });
+  ui.clearBtn.addEventListener('click', () => { clearCloud(); setMessage('Point cloud cleared.'); });
+  ui.zeroBtn.addEventListener('click', zeroOrientation); ui.exportBtn.addEventListener('click', savePLY);
+  window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state.running && state.mode === 'live') setMessage('Page went into the background. Browsers may suspend live audio; return to the page to resume.', 'warn');
+    if (!document.hidden && state.running && state.ctx && state.ctx.state !== 'running') state.ctx.resume().catch(() => { });
+    if (!document.hidden && state.running && state.mode === 'live') requestWakeLock();
+  });
+  ui.mStart.addEventListener('click', () => ui.startBtn.click());
+  ui.mClear.addEventListener('click', () => ui.clearBtn.click());
+  ui.mZero.addEventListener('click', () => ui.zeroBtn.click());
+  // A laptop/desktop has no motion sensors worth using: default to stereo there, sensors on touch devices.
+  if (!matchMedia('(pointer: coarse)').matches) ui.aimMode.value = 'stereo';
+  // iPhone: while the mic is open Safari plays through the earpiece (top, screen side), ~14 cm from the
+  // bottom mic. Default the beam axis and direct-path spacing to match; both stay adjustable.
+  if (IOS) {
+    ui.axis.value = 'screen'; ui.spacing.value = '14';
+    setMessage('iPhone: Safari plays sound through the earpiece while the mic is on, so aim with the screen side (set below). Allow Motion & Orientation when asked, hold still for a second to lock, then sweep slowly. To check which speaker is used, pick the 1–4 kHz band and listen; if the chirp comes from the bottom, set Beam axis to Bottom edge. If the chirp never locks, try 15–20 kHz.');
+  }
+  resize(); updateControls(); updateAimMode(); setCounts(); lockSignal(false); updateBaselineUI(); requestAnimationFrame(loop);
+  // Test hook (read-only snapshot) for automated checks.
+  window.__echoscope = { state, settings, addPoint, drawScene };
+})();
+</script>
+</body>
+</html>
