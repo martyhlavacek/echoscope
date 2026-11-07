@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f1d">
-<title>EchoScope | Acoustic 3D Scanner MVP · v1.4</title>
+<title>EchoScope | Acoustic scanner + room capture · v2.0</title>
 <style>
 :root{color-scheme:dark;--bg:#080f1d;--panel:#101d30;--panel2:#0c1929;--line:#23364c;--muted:#91a6bf;--text:#eaf5ff;--accent:#38e2cc;--blue:#55a8ff;--amber:#f4bd70;--red:#fc7d8d}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -29,29 +29,71 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
 .mb-btn{flex:1;padding:11px 8px;border-radius:10px;border:1px solid #30516a;background:#132a40e6;color:#c9e8f4;font-weight:800;font-size:13px;-webkit-tap-highlight-color:transparent}
 .mb-btn.mb-start{flex:1.6;border:none;background:linear-gradient(120deg,#3ce5c5,#24c6db);color:#062533}.mb-btn.mb-start.running{background:linear-gradient(120deg,#f08991,#f7bd7c);color:#3a1c20}
 @media(max-width:620px){.mobile-bar{display:flex}.viewport .corner{display:none}}
+
+#roomGl{position:absolute;inset:0;width:100%;height:100%}#roomGl[hidden],.room-live[hidden],.room-tools[hidden],.ar-link[hidden]{display:none}
+.room-live{position:absolute;inset:0;pointer-events:none}
+.viewport .hud[hidden]{display:none}.room-prompt{position:absolute;left:50%;top:27%;transform:translate(-50%,-50%);font:800 clamp(17px,3.2vw,26px)/1.25 system-ui,-apple-system,sans-serif;letter-spacing:1.4px;color:#effffc;text-shadow:0 2px 14px #000c;text-align:center;white-space:nowrap}
+.room-prompt small{display:block;font:600 12px/1.45 ui-monospace,Consolas,monospace;color:#a5efe2;letter-spacing:.5px;margin-top:5px;white-space:normal}
+#camPreview{position:absolute;top:12px;right:12px;width:72px;height:auto;border:1px solid #3c6a7f;border-radius:8px;background:#0b1a29;box-shadow:0 4px 18px #0007}
+.room-bottom{position:absolute;left:12px;right:12px;bottom:12px;display:grid;gap:6px}
+#panoPreview{width:100%;height:auto;border:1px solid #2c5163;border-radius:8px;background:#0e2030;display:block}
+.room-meter{display:flex;gap:6px;font:700 10px ui-monospace,Consolas,monospace;color:#9ccbe0;letter-spacing:.4px}
+.room-meter span{flex:1;padding:4px 6px;border:1px solid #2b4d62;border-radius:7px;background:#0b1b2bd9;text-align:center;white-space:nowrap}
+.room-meter span.done{color:#062533;background:#3ce5c5;border-color:#3ce5c5}.room-meter span.now{border-color:#f4bd70;color:#ffe1b8}
+.room-tools{border-top:1px solid var(--line);padding:12px 16px;display:grid;gap:10px}
+.room-summary{font:12px/1.55 ui-monospace,Consolas,monospace;color:#bfe3f2}.room-summary b{color:var(--accent);font-weight:700}
+.room-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid #30516a;border-radius:9px;overflow:hidden}.seg button{background:#0d2236;color:#bfd8e8;border:none;padding:7px 12px;font-weight:700;font-size:12px}.seg button+button{border-left:1px solid #30516a}.seg button.on{background:#1d4f63;color:#8ffff0}
+.chk{font-size:12px;color:#bcd3e3;display:inline-flex;gap:6px;align-items:center}.ar-link{display:inline-flex;line-height:0}.ar-link img{border-radius:9px}
+.room-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}.room-tools .adv{margin-top:0}
+.steps{margin:2px 0 4px;padding-left:18px;color:#bcd3e3;font-size:12px}.steps li{margin:4px 0}.steps b{color:#e7fbff}
+@media(max-width:620px){.room-bottom{bottom:62px}.room-grid{grid-template-columns:1fr}#camPreview{width:60px}}
 </style>
 </head>
 <body>
 <div class="shell">
- <header class="top"><div class="brand"><div class="logo">◉</div><div><strong>ECHO<span style="color:var(--accent)">SCOPE</span></strong><small>Acoustic 3D scanner · research MVP</small></div></div><span class="tag">LFM CHIRP / CFAR / IMU / STEREO · v1.4</span></header>
+ <header class="top"><div class="brand"><div class="logo">◉</div><div><strong>ECHO<span style="color:var(--accent)">SCOPE</span></strong><small>Acoustic 3D scanner · research MVP</small></div></div><span class="tag">LFM CHIRP / CFAR / IMU / STEREO / ROOM · v2.0</span></header>
  <main class="layout">
   <section class="card scan-card" aria-label="3D point cloud viewer">
-   <div class="section-header"><span class="section-title">Spatial reconstruction <span style="color:#698ba5;font-weight:500">/ point cloud</span></span><span class="status" id="status"><i class="dot"></i><span id="statusText">STANDBY</span></span></div>
-   <div class="viewport" id="viewport"><canvas id="scene" aria-label="3D plotted acoustic echoes"></canvas><div class="hud"><span class="line" id="hudMode">SOURCE: INACTIVE</span><span class="line" id="hudSamples">POINTS: 0 / 4000</span><span class="line" id="hudOrientation">ORIENTATION: WAITING</span><span class="line" id="hudEcho">ECHO: —</span><span class="line dim" id="hudPerf">DSP — · DRAW —</span></div><div class="reticle"></div><div class="corner">DRAG TO ORBIT · PINCH/SCROLL TO ZOOM</div><div class="mobile-bar" id="mobileBar"><button class="mb-btn mb-start" id="mStart" type="button">▶ Start</button><button class="mb-btn" id="mClear" type="button">Clear</button><button class="mb-btn" id="mZero" type="button">Zero</button></div></div>
+   <div class="section-header"><span class="section-title">Spatial reconstruction <span style="color:#698ba5;font-weight:500" id="viewTitle">/ point cloud</span></span><span class="status" id="status"><i class="dot"></i><span id="statusText">STANDBY</span></span></div>
+   <div class="viewport" id="viewport"><canvas id="scene" aria-label="3D plotted acoustic echoes"></canvas><canvas id="roomGl" aria-label="Textured 3D dollhouse of the captured room" hidden></canvas><div class="room-live" id="roomLive" hidden><div class="room-prompt" id="roomPrompt">HOLD STILL</div><canvas id="camPreview" width="144" height="192" aria-label="Latest selfie-camera photo"></canvas><div class="room-bottom"><div class="room-meter"><span id="mTurn">TURN 0%</span><span id="mFloor">FLOOR</span><span id="mCeil">CEILING</span><span id="mShots">0 PHOTOS</span></div><canvas id="panoPreview" width="360" height="90" aria-label="Panorama being stitched"></canvas></div></div><div class="hud" id="hud"><span class="line" id="hudMode">SOURCE: INACTIVE</span><span class="line" id="hudSamples">POINTS: 0 / 4000</span><span class="line" id="hudOrientation">ORIENTATION: WAITING</span><span class="line" id="hudEcho">ECHO: —</span><span class="line dim" id="hudPerf">DSP — · DRAW —</span></div><div class="reticle" id="reticle"></div><div class="corner" id="corner">DRAG TO ORBIT · PINCH/SCROLL TO ZOOM</div><div class="mobile-bar" id="mobileBar"><button class="mb-btn mb-start" id="mStart" type="button">▶ Start</button><button class="mb-btn" id="mClear" type="button">Clear</button><button class="mb-btn" id="mZero" type="button">Zero</button></div></div>
+   <div class="room-tools" id="roomTools" hidden>
+    <div class="room-summary" id="roomSummary">—</div>
+    <div class="room-row"><div class="seg" id="viewSeg" role="group" aria-label="View"><button type="button" data-view="dollhouse" class="on">Dollhouse</button><button type="button" data-view="top">Floor plan</button><button type="button" data-view="inside">Inside</button></div><label class="chk"><input type="checkbox" id="showPts"> sonar points</label><a class="ar-link" id="arLink" rel="ar" hidden><img id="arImg" alt="View in AR" width="118" height="34"></a></div>
+    <details class="adv" id="roomAdjust"><summary>Adjust room <span class="code" id="fitNote" style="color:var(--muted);font-weight:400"></span></summary><div class="adv-body room-grid">
+     <div class="range-row"><div class="range-head"><label for="wallF">Front wall</label><output id="wallFVal">—</output></div><input type="range" min="0.4" max="8" step="0.05" value="2" id="wallF"></div>
+     <div class="range-row"><div class="range-head"><label for="wallB">Back wall</label><output id="wallBVal">—</output></div><input type="range" min="0.4" max="8" step="0.05" value="2" id="wallB"></div>
+     <div class="range-row"><div class="range-head"><label for="wallL">Left wall</label><output id="wallLVal">—</output></div><input type="range" min="0.4" max="8" step="0.05" value="2" id="wallL"></div>
+     <div class="range-row"><div class="range-head"><label for="wallR">Right wall</label><output id="wallRVal">—</output></div><input type="range" min="0.4" max="8" step="0.05" value="2" id="wallR"></div>
+     <div class="range-row"><div class="range-head"><label for="floorH">Floor below phone</label><output id="floorHVal">—</output></div><input type="range" min="0.3" max="2.5" step="0.05" value="1.3" id="floorH"></div>
+     <div class="range-row"><div class="range-head"><label for="ceilH">Ceiling above phone</label><output id="ceilHVal">—</output></div><input type="range" min="0.3" max="3" step="0.05" value="1.2" id="ceilH"></div>
+     <div class="range-row"><div class="range-head"><label for="roomRot">Rotation</label><output id="roomRotVal">—</output></div><input type="range" min="0" max="89.5" step="0.5" value="0" id="roomRot"></div>
+     <div class="range-row" style="align-self:end"><button class="small-button" id="refitBtn" type="button" style="width:100%">Re-fit from sonar</button></div>
+    </div></details>
+    <div class="toolbar"><button class="small-button" id="glbBtn" type="button">Export 3D (.glb)</button><button class="small-button" id="usdzBtn" type="button">Export AR (.usdz)</button><button class="small-button" id="panoBtn" type="button">Export 360° panorama</button></div>
+   </div>
    <div class="scan-foot"><div class="toolbar"><button class="small-button" id="clearBtn">Clear cloud</button><button class="small-button" id="zeroBtn">Zero orientation</button><button class="small-button" id="exportBtn">Export .PLY</button></div><span class="hint" id="cloudHint">No measured points yet</span></div>
   </section>
   <div class="side">
-   <section class="card"><div class="section-header"><span class="section-title">Acquisition controls</span><span class="eyebrow">Rev 1.4</span></div><div class="controls">
+   <section class="card"><div class="section-header"><span class="section-title">Acquisition controls</span><span class="eyebrow">Rev 2.0</span></div><div class="controls">
     <button class="primary" id="startBtn">▶ Start scan</button>
     <button class="quick-demo" id="quickDemo" type="button">✦ Run 3D demo (no microphone needed)</button>
     <div class="switchline"><label for="demo">Simulation mode<small>Synthetic room through the real DSP pipeline</small></label><input class="toggle" type="checkbox" id="demo"></div>
     <div class="range-row"><div class="range-head"><label for="aimMode">Direction source</label></div>
-     <select class="select" id="aimMode"><option value="sensors" selected>Phone motion sensors — sweep the phone (3D)</option><option value="stereo">Laptop stereo speakers — stationary 2D map</option><option value="manual">Manual yaw/pitch — assumed direction (one line)</option></select>
+     <select class="select" id="aimMode"><option value="room">Room capture — sonar + selfie camera → 3D dollhouse</option><option value="sensors" selected>Phone motion sensors — sweep the phone (3D)</option><option value="stereo">Laptop stereo speakers — stationary 2D map</option><option value="manual">Manual yaw/pitch — assumed direction (one line)</option></select>
      <small id="aimHint"></small></div>
     <div class="manual-panel" id="sensorsPanel" hidden>
       <div class="range-row" style="margin-top:2px"><div class="range-head"><label for="axis">Beam axis — where the sound leaves the phone</label></div>
        <select class="select" id="axis"><option value="back" selected>Back of phone — aim like a camera</option><option value="bottom">Bottom edge — loudspeaker grille, aim like a remote</option><option value="screen">Screen side — earpiece (iPhone with mic on)</option></select>
        <small>iPhone Safari moves sound to the earpiece while the mic is open, so “Screen side” is the default there. Unsure? Use the 1–4 kHz band and listen.</small></div>
+    </div>
+    <div class="manual-panel" id="roomPanel" hidden>
+      <ol class="steps"><li>Hold the phone upright against your chest with the <b>screen facing out</b> — the selfie camera and earpiece look into the room.</li><li>Press Start, hold still a moment, then <b>turn slowly on the spot</b> through a full circle (about 30 s). Each tick is a photo.</li><li>At the chime, <b>point the screen at the floor</b>, then <b>at the ceiling</b>. A final chime builds the dollhouse (or press Stop any time).</li></ol>
+      <div class="range-row"><div class="range-head"><label for="armRadius">Phone distance from your body axis</label><output id="armRadiusVal">20 cm</output></div><input type="range" min="0" max="60" step="1" value="20" id="armRadius"><small>The phone circles your body as you turn; this corrects wall distances and photo parallax.</small></div>
+      <div class="range-row"><div class="range-head"><label for="camFov">Selfie camera field of view</label><output id="camFovVal">74°</output></div><input type="range" min="50" max="100" step="1" value="74" id="camFov"><small>Across the long side of each photo. Adjust if the stitched panorama shows doubled edges.</small></div>
+      <div class="range-row"><div class="range-head"><label for="frameRot">Photo orientation</label></div><select class="select" id="frameRot"><option value="auto" selected>Auto (from screen orientation)</option><option value="0">Portrait</option><option value="90">Landscape, top to the left</option><option value="270">Landscape, top to the right</option><option value="180">Upside down</option></select></div>
+      <div class="switchline"><label for="camMirror">Mirror photos<small>Only if the stitched room looks mirrored</small></label><input class="toggle" type="checkbox" id="camMirror"></div>
+      <div class="switchline" style="margin-top:0"><label for="voice">Spoken prompts<small>Ticks and chimes play either way</small></label><input class="toggle" type="checkbox" id="voice" checked></div>
     </div>
     <div class="manual-panel" id="manualPanel" hidden>
       <div class="range-row"><div class="range-head"><label for="aimYaw">Virtual yaw</label><output id="aimYawVal">0°</output></div><input type="range" min="-75" max="75" step="1" value="0" id="aimYaw"></div>
@@ -78,10 +120,10 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
      <div class="range-row"><div class="range-head"><label for="spacing">Speaker–mic spacing</label><output id="spacingVal">5 cm</output></div><input type="range" min="0" max="30" step="1" value="5" id="spacing"><small>Direct path length; added back to every range</small></div>
      <div class="range-row"><div class="range-head"><label for="temp">Air temperature</label><output id="tempVal">20 °C</output></div><input type="range" min="0" max="40" step="1" value="20" id="temp"><small>Sets the speed of sound (343 m/s at 20 °C)</small></div>
     </div></details>
-    <div class="baseline"><div class="head"><span>Clutter baseline</span><span class="base-state" id="baseState">Off</span></div>
+    <div class="baseline" id="baselineBox"><div class="head"><span>Clutter baseline</span><span class="base-state" id="baseState">Off</span></div>
      <small id="baseHelp">Learns what stays fixed relative to the phone — direct-path tail, phone body, your hand and torso — and subtracts it. Capture while sweeping slowly.</small>
      <div class="row"><button class="small-button" id="baseBtn" type="button">Capture baseline</button><button class="small-button" id="baseClear" type="button">Clear</button></div></div>
-    <div class="message" id="message" role="status" aria-live="polite">Pick a direction source, then run the <strong>3D demo</strong> to see it on a synthetic room, or start a live scan (HTTPS, localhost or a local file).</div>
+    <div class="message" id="message" role="status" aria-live="polite">Pick a direction source, then run the <strong>demo</strong> to see it on a synthetic room, or start a live scan (HTTPS, localhost or a local file).</div>
    </div></section>
    <section class="card"><div class="section-header"><span class="section-title">Live telemetry</span><span class="eyebrow" id="deviceState">NO STREAM</span></div>
     <div class="telemetry">
@@ -460,6 +502,12 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
         const a = re[off + m], b = im[off + m];
         pr[m] = a * ir - b * ii; pi[m] = a * ii + b * ir;
       }
+      if (this.recorder && this.recordSeq++ % this.recordStride === 0) {
+        // Bounded memory: when full, keep every other record and halve the rate from then on, so a long
+        // capture still spans its whole duration (the floor/ceiling at the end are not dropped).
+        if (this.recorder.length >= this.recordMax) { this.recorder = this.recorder.filter((_, i) => i % 2 === 0); this.recordStride *= 2; }
+        this.recorder.push({ re: Float32Array.from(pr), im: Float32Array.from(pi), d0, aim: h.aim[slot] ? h.aim[slot].slice() : null });
+      }
       let captureDone = false;
       if (this.capture) {
         const c = this.capture;
@@ -480,9 +528,9 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
 
     // Ordered-statistic background: quantile of the training cells (both sides), evaluated on a
     // decimated grid and linearly interpolated, scaled to an exponential-distribution mean.
-    _osBackground(lo, hi) {
+    _osBackground(lo, hi, pow = this.pow) {
       if (!this.bg || this.bg.length !== this.profLen) this.bg = new Float64Array(this.profLen);
-      const pow = this.pow, G = this.G, T = this.T, bg = this.bg, dec = Math.max(1, this.lobe >> 2);
+      const G = this.G, T = this.T, bg = this.bg, dec = Math.max(1, this.lobe >> 2);
       const vals = this.osVals && this.osVals.length >= 2 * T + 4 ? this.osVals : (this.osVals = new Float64Array(2 * T + 4));
       const q = this.cfg.osQuantile || 0.5, toMean = -1 / Math.log(1 - q);
       let prevM = -1, prevV = 0;
@@ -518,10 +566,17 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
       }
       const inv = 1 / K; for (let m = 0; m < N; m++) pow[m] *= inv;
       d0 /= K;
-      const thr = this.thr, G = this.G, alpha = this.alpha;
+      const r = this._cfarPeaks(pow, d0, this.thr);
+      return { echo: r.peaks[0] || null, peaks: r.peaks, floorDb: r.floorDb, averaged: K };
+    }
+
+    // Median OS-CFAR on a power profile (index = lag + pre, direct path = 1). d0: mean fractional
+    // offset of the direct peak(s) the profile was aligned to. Fills thr (threshold curve).
+    _cfarPeaks(pow, d0, thr, maxPeaks = this.cfg.maxPeaks || 4) {
+      const G = this.G, alpha = this.alpha;
       const lo = this.pre + this.minLag, hi = this.pre + this.maxLagLive, absFloor = 1e-10;
       thr.fill(NaN);
-      const cands = [], bg = this._osBackground(lo, hi);
+      const cands = [], bg = this._osBackground(lo, hi, pow);
       for (let m = lo; m <= hi; m++) {
         const t = alpha * Math.max(bg[m], absFloor); thr[m] = t;
         const p = pow[m];
@@ -539,10 +594,45 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
           index: m, lag, delay, distance: (delay * this.speed + this.cfg.spacing) / 2,
           levelDb: db10(pow[m]), snrDb: db10(pow[m] * alpha / thr[m])
         });
-        if (peaks.length >= (this.cfg.maxPeaks || 4)) break;
+        if (peaks.length >= maxPeaks) break;
       }
-      const floorDb = db10(median(pow, lo, hi + 1, this.scratch));
-      return { echo: peaks[0] || null, peaks, floorDb, averaged: K };
+      return { peaks, floorDb: db10(median(pow, lo, hi + 1, this.scratch)) };
+    }
+
+    // Room capture: every accepted chirp's direct-normalised complex profile is kept with its aim.
+    startRecording(max = 900) { this.recorder = []; this.recordMax = max; this.recordStride = 1; this.recordSeq = 0; }
+    stopRecording() { const r = this.recorder || []; this.recorder = null; return r; }
+
+    // Offline two-pass analysis of a recording made while turning on the spot. Echoes that stay at
+    // the same range whatever the heading (floor, ceiling, your body, the phone itself) form the
+    // turn-average profile ("static"); subtracting it leaves the heading-dependent echoes (walls).
+    analyzeRecording(records, maxPeaks = 6) {
+      const N = this.profLen, n = records.length;
+      if (!n) return { staticPeaks: [], dynamic: [] };
+      // Turn average, balanced over headings: each 10° bin of level aims counts equally, so dwelling at one
+      // heading (holding still at the start, aiming at the floor) does not leave a ghost of that view in
+      // every other heading after subtraction. Unaimed or steep chirps only count if nothing else exists.
+      const bins = new Map(), wts = new Float64Array(n);
+      records.forEach((r, i) => {
+        const a = r.aim; if (!a) return;
+        const norm = Math.hypot(a[0], a[1], a[2]) || 1, pitch = Math.asin(Math.max(-1, Math.min(1, a[1] / norm)));
+        if (Math.abs(pitch) > 35 * Math.PI / 180) return;
+        const b = Math.floor((Math.atan2(a[0], -a[2]) + Math.PI) / (10 * Math.PI / 180)) % 36;
+        if (!bins.has(b)) bins.set(b, []); bins.get(b).push(i);
+      });
+      if (bins.size) for (const list of bins.values()) for (const i of list) wts[i] = 1 / (bins.size * list.length);
+      else wts.fill(1 / n);
+      const Br = new Float64Array(N), Bi = new Float64Array(N); let d0m = 0;
+      records.forEach((r, i) => { const w = wts[i]; if (!w) return; d0m += w * r.d0; for (let m = 0; m < N; m++) { Br[m] += w * r.re[m]; Bi[m] += w * r.im[m]; } });
+      const pow = new Float64Array(N), thr = new Float64Array(N);
+      for (let m = 0; m < N; m++) pow[m] = Br[m] * Br[m] + Bi[m] * Bi[m];
+      const staticPeaks = this._cfarPeaks(pow, d0m, thr, maxPeaks).peaks;
+      const dynamic = [];
+      for (const r of records) {
+        for (let m = 0; m < N; m++) { const a = r.re[m] - Br[m], b = r.im[m] - Bi[m]; pow[m] = a * a + b * b; }
+        dynamic.push({ aim: r.aim, peaks: this._cfarPeaks(pow, r.d0, thr, maxPeaks).peaks });
+      }
+      return { staticPeaks, dynamic };
     }
   }
 
@@ -734,10 +824,662 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
 });
 </script>
 <script>
-/* EchoScope app v1.3 — UI, audio I/O, orientation, stereo triangulation and rendering. DSP lives in EchoDSP. */
+/* EchoScope room capture v2.0 — box-room fit from sonar, selfie panorama stitching, face textures,
+   synthetic room (demo), WebGL dollhouse viewer and GLB export. Browser: window.EchoRoom · Node: module.exports */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.EchoRoom = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+  const TAU = 2 * Math.PI, DEG = Math.PI / 180;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const wrap = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm3 = v => { const n = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / n, v[1] / n, v[2] / n]; };
+  // Scene convention (same as the point cloud): x right, y up, forward = −z. Yaw ψ = atan2(x, −z).
+  const dirFrom = (yaw, pitch) => [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+  const yawOf = v => Math.atan2(v[0], -v[2]);
+  const pitchOf = v => Math.asin(clamp(v[1] / (Math.hypot(v[0], v[1], v[2]) || 1), -1, 1));
+  // Outward wall normals of a box rotated by phi: k = 0 front, 1 right, 2 back, 3 left.
+  const wallNormal = (phi, k) => [Math.sin(phi + k * Math.PI / 2), 0, -Math.cos(phi + k * Math.PI / 2)];
+
+  function weightedMedian(vals, wts) {
+    const idx = vals.map((v, i) => i).sort((a, b) => vals[a] - vals[b]);
+    let tot = 0; for (const w of wts) tot += w;
+    let acc = 0;
+    for (const i of idx) { acc += wts[i]; if (acc >= tot / 2) return vals[i]; }
+    return vals[idx[idx.length - 1]];
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Room fit. dynamic: [{aim:[x,y,z], peaks:[{distance, snrDb}]}] (heading-dependent echoes after
+  // removing the turn average); staticPeaks: echoes present at every heading (floor/ceiling/body).
+  // A wide sonar beam hears a flat wall at its PERPENDICULAR distance while the wall normal is in
+  // the beam, so each wall shows up as a plateau of constant range over a sector of headings.
+  // We grid-search the box rotation and take each wall's distance from the echoes heard while
+  // aiming within ±sector of its normal.
+  // ---------------------------------------------------------------------------------------------
+  function fitRoom(dynamic, staticPeaks = [], opts = {}) {
+    // arm: radius of the circle the phone travels on while you turn (it is held in front of your body
+    // axis). Wall k is heard at its perpendicular distance from the PHONE, D_k − arm·cos(yaw − n_k), so
+    // walls are reported from the body axis (the capture point) after adding that back.
+    const o = Object.assign({ sector: 28 * DEG, beam: 75 * DEG, anglePenalty: 1.0, minR: 0.5, maxR: 6, arm: 0, defaultWall: 2.0, defaultFloor: 1.3, defaultCeiling: 1.2 }, opts);
+    // Strongest echo per chirp, split by aim elevation.
+    const horiz = [], down = [], up = [];
+    for (const s of dynamic) {
+      if (!s.aim || !s.peaks || !s.peaks.length) continue;
+      const pitch = pitchOf(s.aim), yaw = yawOf(s.aim);
+      for (const p of s.peaks.slice(0, 2)) {
+        if (!(p.distance >= o.minR && p.distance <= o.maxR)) continue;
+        const e = { yaw, pitch, r: p.distance, w: Math.max(0.5, p.snrDb - 8) };
+        if (Math.abs(pitch) < 35 * DEG) horiz.push(e);
+        else if (pitch <= -35 * DEG) down.push(e); else up.push(e);
+        break; // strongest only: a wide beam's weaker peaks are mostly other surfaces
+      }
+    }
+    // Floor / ceiling: the turn-average (static) echoes are aim-independent surfaces. Prefer
+    // aimed evidence (tilting down/up) when there is enough of it.
+    // Specular: a flat floor/ceiling answers from the point straight below/above, so the range itself
+    // is the height, whatever the tilt (projecting by sin(pitch) would assume a narrow beam).
+    // Plausibility: a hand-held phone is 0.6–2.0 m above the floor and 0.4–2.6 m below the ceiling;
+    // anything else is a misdetection and falls back to the defaults (editable afterwards).
+    const okFloor = v => v >= 0.6 && v <= 2.0, okCeil = v => v >= 0.4 && v <= 2.6;
+    const med = arr => arr.length ? weightedMedian(arr.map(e => e.r), arr.map(e => e.w)) : NaN;
+    let floor = down.length >= 4 ? med(down) : NaN, ceiling = up.length >= 4 ? med(up) : NaN;
+    let floorSource = okFloor(floor) ? 'aimed' : 'default', ceilingSource = okCeil(ceiling) ? 'aimed' : 'default';
+    if (floorSource === 'default') floor = NaN;
+    if (ceilingSource === 'default') ceiling = NaN;
+    // Without aimed evidence, the strongest turn-average echoes are candidates (narrower windows).
+    const statics = staticPeaks.filter(p => p.distance > 0.7 && p.distance < 2.2).sort((a, b) => b.levelDb - a.levelDb);
+    if (!Number.isFinite(floor)) { const c = statics.find(p => p.distance >= 0.8 && p.distance <= 1.7); if (c) { floor = c.distance; floorSource = 'static'; } }
+    if (!Number.isFinite(ceiling)) {
+      const c = statics.find(p => p.distance >= 0.5 && p.distance <= 1.8 && (!Number.isFinite(floor) || Math.abs(p.distance - floor) > 0.25));
+      if (c) { ceiling = c.distance; ceilingSource = 'static'; }
+    }
+    if (!Number.isFinite(floor)) floor = o.defaultFloor;
+    if (!Number.isFinite(ceiling)) ceiling = o.defaultCeiling;
+    // Horizontal echoes at (about) the floor/ceiling distance are likely those surfaces heard
+    // through the wide beam, not walls: down-weight them.
+    for (const e of horiz) if (Math.abs(e.r - floor) < 0.08 || Math.abs(e.r - ceiling) < 0.08) e.w *= 0.25;
+    const evalPhi = phi => {
+      const d = [], n = [];
+      for (let k = 0; k < 4; k++) {
+        const nk = phi + k * Math.PI / 2, vals = [], wts = [];
+        for (const e of horiz) { const a = wrap(e.yaw - nk); if (Math.abs(a) < o.sector) { vals.push(e.r + o.arm * Math.cos(a)); wts.push(e.w); } }
+        n.push(vals.length);
+        d.push(vals.length >= 3 ? weightedMedian(vals, wts) : NaN);
+      }
+      // Each echo is explained by whichever wall in the beam fits its range best (near a corner either
+      // wall may be the loudest, so "nearest wall" would bias the rotation), with a soft penalty for
+      // claiming a wall heard more than 45° off its normal.
+      let cost = 0, wsum = 0;
+      for (const e of horiz) {
+        let err = Infinity;
+        for (let k = 0; k < 4; k++) {
+          const a = wrap(e.yaw - (phi + k * Math.PI / 2));
+          if (!Number.isFinite(d[k]) || Math.abs(a) > o.beam) continue;
+          err = Math.min(err, Math.abs(e.r - (d[k] - o.arm * Math.cos(a))) + o.anglePenalty * Math.max(0, Math.abs(a) - 45 * DEG));
+        }
+        if (!Number.isFinite(err)) continue;
+        cost += e.w * Math.min(err, 0.5); wsum += e.w;
+      }
+      const known = d.filter(Number.isFinite).length;
+      if (!known) return null;
+      return { phi, d, n, score: cost / (wsum || 1) + 0.15 * (4 - known), resid: cost / (wsum || 1) }; // prefer orientations that explain more walls
+    };
+    let best = null;
+    for (let deg = 0; deg < 90; deg += 1) { const r = evalPhi(deg * DEG); if (r && (!best || r.score < best.score)) best = r; }
+    if (best) { // sub-degree refinement around the coarse optimum
+      const c = best.phi;
+      for (let k = -10; k <= 10; k++) { const r = evalPhi(c + k * 0.1 * DEG); if (r && r.score < best.score - 1e-9) best = r; }
+      if (best.phi < 0) best.phi += Math.PI / 2;
+    }
+    if (!best) best = { phi: 0, d: [NaN, NaN, NaN, NaN], n: [0, 0, 0, 0], score: Infinity, resid: NaN };
+    // walls: keep plausible ones (0.5–6 m from where you stood); a missing wall mirrors its opposite
+    const dd = best.d.map(v => Number.isFinite(v) && v >= 0.5 && v <= 6 ? v : NaN), known = dd.map(Number.isFinite);
+    const d = dd.map((v, k) => Number.isFinite(v) ? v : Number.isFinite(dd[(k + 2) % 4]) ? dd[(k + 2) % 4] : o.defaultWall);
+    return {
+      phi: best.phi, d, floor, ceiling, known, counts: best.n, residual: best.resid, arm: o.arm,
+      floorSource, ceilingSource, samples: { horizontal: horiz.length, down: down.length, up: up.length }
+    };
+  }
+
+  // Distance along unit direction d from point pos (inside the box) to the box surface, and which
+  // surface: 0–3 walls, 4 floor, 5 ceiling.
+  function boxHit(room, d, pos = [0, 0, 0]) {
+    let t = Infinity, face = -1;
+    for (let k = 0; k < 4; k++) {
+      const n = wallNormal(room.phi, k), dn = dot(d, n);
+      if (dn > 1e-6) { const tk = (room.d[k] - dot(pos, n)) / dn; if (tk < t) { t = tk; face = k; } }
+    }
+    if (d[1] < -1e-6) { const tf = (room.floor + pos[1]) / -d[1]; if (tf < t) { t = tf; face = 4; } }
+    if (d[1] > 1e-6) { const tc = (room.ceiling - pos[1]) / d[1]; if (tc < t) { t = tc; face = 5; } }
+    return { t: Math.max(1e-3, t), face };
+  }
+  // Phone position while turning: arm·(horizontal heading of the camera), using the device top when the
+  // camera looks almost straight up/down.
+  function phonePos(cam, arm) {
+    let h = [cam.fwd[0], 0, cam.fwd[2]];
+    if (Math.hypot(h[0], h[2]) < 0.2 && cam.up) h = [cam.up[0], 0, cam.up[2]];
+    const n = Math.hypot(h[0], h[2]);
+    return n > 1e-6 ? [arm * h[0] / n, 0, arm * h[2] / n] : [0, 0, 0];
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Camera model: basis vectors in scene coordinates (fwd = optical axis, right = image +x,
+  // up = image up). fovLong = field of view across the longer image side.
+  // ---------------------------------------------------------------------------------------------
+  function camProject(cam, w, h, fovLong, d) {
+    const zc = dot(d, cam.fwd); if (zc <= 1e-6) return null;
+    const f = (Math.max(w, h) / 2) / Math.tan(fovLong / 2);
+    return [w / 2 + f * dot(d, cam.right) / zc - 0.5, h / 2 - f * dot(d, cam.up) / zc - 0.5];
+  }
+  function camRay(cam, w, h, fovLong, px, py) {
+    const f = (Math.max(w, h) / 2) / Math.tan(fovLong / 2), x = (px + 0.5 - w / 2) / f, y = (h / 2 - py - 0.5) / f;
+    return norm3([cam.fwd[0] + x * cam.right[0] + y * cam.up[0], cam.fwd[1] + x * cam.right[1] + y * cam.up[1], cam.fwd[2] + x * cam.right[2] + y * cam.up[2]]);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Equirectangular panorama stitched from low-res frames by their IMU pose. Feathered blending.
+  // ---------------------------------------------------------------------------------------------
+  class Panorama {
+    constructor(W = 1024, H = 512) {
+      this.W = W; this.H = H; this.acc = new Float32Array(W * H * 3); this.wt = new Float32Array(W * H); this.frames = 0;
+    }
+    // frame: {data: RGBA Uint8ClampedArray, w, h, cam: {fwd,right,up}}.
+    // opts.pos: where the camera was (metres from the capture point); opts.room: box used as the scene
+    // depth, so each panorama direction is projected into the frame from the camera's true position
+    // (removes the parallax of a phone that travels on a circle). Without a room, depth = infinity.
+    // opts.gain (default true): match the frame's exposure to what is already stitched.
+    add(frame, fovLong, opts = {}) {
+      const { W, H, acc, wt } = this, { data, w, h, cam } = frame, pos = opts.pos || [0, 0, 0], room = opts.room || null;
+      const halfDiag = Math.atan(Math.tan(fovLong / 2) * Math.hypot(w, h) / Math.max(w, h)) + (room ? 14 : 2) * DEG;
+      const cy = yawOf(cam.fwd), cp = pitchOf(cam.fwd);
+      const vMin = Math.max(0, Math.floor((Math.PI / 2 - (cp + halfDiag)) / Math.PI * H));
+      const vMax = Math.min(H - 1, Math.ceil((Math.PI / 2 - (cp - halfDiag)) / Math.PI * H));
+      const poleNear = Math.abs(cp) + halfDiag > Math.PI / 2 - 0.05;
+      const f = (Math.max(w, h) / 2) / Math.tan(fovLong / 2), F = cam.fwd, R = cam.right, U = cam.up;
+      const visit = (step, cb) => {
+        for (let v = vMin; v <= vMax; v += step) {
+          const lat = Math.PI / 2 - (v + 0.5) / H * Math.PI, cl = Math.cos(lat), sl = Math.sin(lat);
+          const span = poleNear || cl < 0.05 ? Math.PI : Math.min(Math.PI, halfDiag / Math.max(0.05, cl) + 2 * DEG);
+          const u0 = Math.floor(((cy - span) + Math.PI) / TAU * W), u1 = Math.ceil(((cy + span) + Math.PI) / TAU * W);
+          for (let uu = u0; uu <= u1; uu += step) {
+            const u = ((uu % W) + W) % W, lon = (u + 0.5) / W * TAU - Math.PI;
+            let dx = Math.sin(lon) * cl, dy = sl, dz = -Math.cos(lon) * cl;
+            if (room) { const t = boxHit(room, [dx, dy, dz]).t; dx = dx * t - pos[0]; dy = dy * t - pos[1]; dz = dz * t - pos[2]; }
+            const zc = dx * F[0] + dy * F[1] + dz * F[2]; if (zc <= 1e-6) continue;
+            const px = w / 2 + f * (dx * R[0] + dy * R[1] + dz * R[2]) / zc - 0.5, py = h / 2 - f * (dx * U[0] + dy * U[1] + dz * U[2]) / zc - 0.5;
+            if (px < 0 || py < 0 || px > w - 1 || py > h - 1) continue;
+            const xn = (px / (w - 1)) * 2 - 1, yn = (py / (h - 1)) * 2 - 1, fe = (1 - xn * xn) * (1 - yn * yn);
+            if (fe > 0) cb(v * W + u, px, py, fe);
+          }
+        }
+      };
+      const sample = (px, py, c) => {
+        const x0 = px | 0, y0 = py | 0, x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1), fx = px - x0, fy = py - y0;
+        return (data[(y0 * w + x0) * 4 + c] * (1 - fx) + data[(y0 * w + x1) * 4 + c] * fx) * (1 - fy) + (data[(y1 * w + x0) * 4 + c] * (1 - fx) + data[(y1 * w + x1) * 4 + c] * fx) * fy;
+      };
+      let gain = 1;
+      if (opts.gain !== false && this.frames > 0) {
+        let sa = 0, sb = 0, n = 0;
+        visit(3, (k, px, py, fe) => {
+          if (wt[k] < 0.3 || fe < 0.25) return;
+          sa += (acc[k * 3] + acc[k * 3 + 1] + acc[k * 3 + 2]) / wt[k]; sb += sample(px, py, 0) + sample(px, py, 1) + sample(px, py, 2); n++;
+        });
+        if (n > 40 && sb > 0) gain = clamp(sa / sb, 0.6, 1.6);
+      }
+      visit(1, (k, px, py, fe) => {
+        const g = fe * gain;
+        acc[k * 3] += g * sample(px, py, 0); acc[k * 3 + 1] += g * sample(px, py, 1); acc[k * 3 + 2] += g * sample(px, py, 2);
+        wt[k] += fe;
+      });
+      this.frames++;
+      return gain;
+    }
+    // Small RGB(A) preview (nearest sampling) for progress displays, latitudes latTop..latBot.
+    preview(pw, ph, out, latTop = Math.PI / 2, latBot = -Math.PI / 2) {
+      const { W, H, acc, wt } = this, img = out || new Uint8ClampedArray(pw * ph * 4);
+      for (let y = 0; y < ph; y++) for (let x = 0; x < pw; x++) {
+        const lat = latTop + (latBot - latTop) * (y + 0.5) / ph, row = clamp(Math.floor((Math.PI / 2 - lat) / Math.PI * H), 0, H - 1);
+        const k = row * W + Math.min(W - 1, Math.floor((x + 0.5) / pw * W)), o = (y * pw + x) * 4, a = wt[k];
+        if (a > 1e-4) { img[o] = acc[k * 3] / a; img[o + 1] = acc[k * 3 + 1] / a; img[o + 2] = acc[k * 3 + 2] / a; img[o + 3] = 255; }
+        else { img[o] = 14; img[o + 1] = 32; img[o + 2] = 48; img[o + 3] = 255; }
+      }
+      return img;
+    }
+    // RGBA image; uncovered pixels are transparent black, so bilinear samples come out premultiplied
+    // (colour × coverage) and can be un-premultiplied cleanly at coverage edges.
+    toImage() {
+      const { W, H, acc, wt } = this, out = new Uint8ClampedArray(W * H * 4);
+      for (let k = 0; k < W * H; k++) {
+        const w = wt[k];
+        if (w > 1e-4) { out[k * 4] = acc[k * 3] / w; out[k * 4 + 1] = acc[k * 3 + 1] / w; out[k * 4 + 2] = acc[k * 3 + 2] / w; out[k * 4 + 3] = 255; }
+      }
+      return { data: out, w: W, h: H };
+    }
+    coverage() { let c = 0; for (let k = 0; k < this.wt.length; k++) if (this.wt[k] > 1e-4) c++; return c / this.wt.length; }
+  }
+  function sampleEquirect(img, d) {
+    const { data, w, h } = img, lon = Math.atan2(d[0], -d[2]), lat = Math.asin(clamp(d[1], -1, 1));
+    const u = (lon + Math.PI) / TAU * w - 0.5, v = (Math.PI / 2 - lat) / Math.PI * h - 0.5;
+    const x0 = Math.floor(u), y0 = clamp(Math.floor(v), 0, h - 1), fx = u - x0, fy = clamp(v - y0, 0, 1);
+    const xa = ((x0 % w) + w) % w, xb = (xa + 1) % w, yb = Math.min(h - 1, y0 + 1), out = [0, 0, 0, 0];
+    for (let c = 0; c < 4; c++) {
+      const a = data[(y0 * w + xa) * 4 + c], b = data[(y0 * w + xb) * 4 + c], e = data[(yb * w + xa) * 4 + c], g = data[(yb * w + xb) * 4 + c];
+      out[c] = (a * (1 - fx) + b * fx) * (1 - fy) + (e * (1 - fx) + g * fx) * fy;
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Box faces: geometry (scene coordinates) and textures resampled from the panorama.
+  // Walls: s runs left→right as seen from inside, t top→bottom. Floor/ceiling: s along the right
+  // wall direction, t from front to back (floor) / back to front (ceiling).
+  // ---------------------------------------------------------------------------------------------
+  function faceGeometry(room) {
+    const { phi, d, floor: Hf, ceiling: Hc } = room, n = k => wallNormal(phi, k), Y = [0, 1, 0];
+    const add = (...vs) => vs.reduce((a, v) => [a[0] + v[0], a[1] + v[1], a[2] + v[2]], [0, 0, 0]);
+    const sc = (v, s) => [v[0] * s, v[1] * s, v[2] * s];
+    const faces = [];
+    for (let k = 0; k < 4; k++) {
+      const nk = n(k), rt = n((k + 1) % 4), dl = d[(k + 3) % 4], dr = d[(k + 1) % 4];
+      const P = (s, t) => add(sc(nk, d[k]), sc(rt, -dl + s * (dl + dr)), sc(Y, Hc - t * (Hc + Hf)));
+      faces.push({ name: ['front', 'right', 'back', 'left'][k], P, width: dl + dr, height: Hc + Hf, inward: sc(nk, -1) });
+    }
+    const n0 = n(0), n1 = n(1);
+    faces.push({ name: 'floor', P: (s, t) => add(sc(n1, -d[3] + s * (d[3] + d[1])), sc(n0, d[0] - t * (d[0] + d[2])), sc(Y, -Hf)), width: d[1] + d[3], height: d[0] + d[2], inward: [0, 1, 0] });
+    faces.push({ name: 'ceiling', P: (s, t) => add(sc(n1, -d[3] + s * (d[3] + d[1])), sc(n0, -d[2] + t * (d[0] + d[2])), sc(Y, Hc)), width: d[1] + d[3], height: d[0] + d[2], inward: [0, -1, 0] });
+    return faces;
+  }
+  // Push-pull hole filling (Gortler et al. 1996): photographed colours diffuse smoothly, coarse to fine,
+  // into texels no photo covered. rgb: straight colour (w·h·3), alpha: coverage in [0,1] (w·h).
+  // Returns false when nothing at all was covered.
+  function pushPull(rgb, alpha, w, h) {
+    const levels = [{ c: rgb, a: Float32Array.from(alpha, v => Math.min(1, v)), w, h }];
+    while (levels[levels.length - 1].w > 1 || levels[levels.length - 1].h > 1) {
+      const L = levels[levels.length - 1], w2 = Math.max(1, Math.ceil(L.w / 2)), h2 = Math.max(1, Math.ceil(L.h / 2));
+      const c = new Float32Array(w2 * h2 * 3), a = new Float32Array(w2 * h2);
+      for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) {
+        let sa = 0, s0 = 0, s1 = 0, s2 = 0;
+        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+          const k = Math.min(L.h - 1, 2 * y + dy) * L.w + Math.min(L.w - 1, 2 * x + dx), wa = L.a[k];
+          sa += wa; s0 += wa * L.c[k * 3]; s1 += wa * L.c[k * 3 + 1]; s2 += wa * L.c[k * 3 + 2];
+        }
+        const k = y * w2 + x;
+        if (sa > 0) { c[k * 3] = s0 / sa; c[k * 3 + 1] = s1 / sa; c[k * 3 + 2] = s2 / sa; }
+        a[k] = Math.min(1, sa);
+      }
+      levels.push({ c, a, w: w2, h: h2 });
+    }
+    if (!(levels[levels.length - 1].a[0] > 0)) return false;
+    for (let l = levels.length - 2; l >= 0; l--) {
+      const F = levels[l], C = levels[l + 1];
+      for (let y = 0; y < F.h; y++) for (let x = 0; x < F.w; x++) {
+        const k = y * F.w + x, a = F.a[k]; if (a >= 1) continue;
+        const u = clamp((x + 0.5) / 2 - 0.5, 0, C.w - 1), v = clamp((y + 0.5) / 2 - 0.5, 0, C.h - 1);
+        const x0 = Math.floor(u), y0 = Math.floor(v), x1 = Math.min(C.w - 1, x0 + 1), y1 = Math.min(C.h - 1, y0 + 1), fx = u - x0, fy = v - y0;
+        for (let ch = 0; ch < 3; ch++) {
+          const cc = (C.c[(y0 * C.w + x0) * 3 + ch] * (1 - fx) + C.c[(y0 * C.w + x1) * 3 + ch] * fx) * (1 - fy) + (C.c[(y1 * C.w + x0) * 3 + ch] * (1 - fx) + C.c[(y1 * C.w + x1) * 3 + ch] * fx) * fy;
+          F.c[k * 3 + ch] = a * F.c[k * 3 + ch] + (1 - a) * cc;
+        }
+        F.a[k] = 1;
+      }
+    }
+    return true;
+  }
+  // Texture for each face (RGBA), ~res px per metre, capped. Texels no photo covered are inpainted
+  // by push-pull and dimmed a little, so partial coverage still reads as a room but the gaps show.
+  // coverage = photographed fraction of the face.
+  function faceTextures(room, pano, res = 96) {
+    return faceGeometry(room).map(f => {
+      const w = clamp(Math.round(f.width * res), 32, 512), h = clamp(Math.round(f.height * res), 32, 512), data = new Uint8ClampedArray(w * h * 4);
+      const alpha = new Float32Array(w * h), rgb = new Float32Array(w * h * 3);
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const p = f.P((i + 0.5) / w, (j + 0.5) / h), c = sampleEquirect(pano, norm3(p)), k = j * w + i, a = c[3] / 255;
+        alpha[k] = a;
+        if (a > 0.004) { rgb[k * 3] = c[0] / a; rgb[k * 3 + 1] = c[1] / a; rgb[k * 3 + 2] = c[2] / a; }
+      }
+      const any = pushPull(rgb, alpha, w, h);
+      let cov = 0;
+      for (let k = 0; k < w * h; k++) {
+        const a = Math.min(1, alpha[k]), o = k * 4, dim = 0.88 + 0.12 * a;
+        if (a > 0.5) cov++;
+        if (any) { data[o] = rgb[k * 3] * dim; data[o + 1] = rgb[k * 3 + 1] * dim; data[o + 2] = rgb[k * 3 + 2] * dim; }
+        else { data[o] = 46; data[o + 1] = 58; data[o + 2] = 72; }
+        data[o + 3] = 255;
+      }
+      return { name: f.name, w, h, data, coverage: cov / (w * h) };
+    });
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Synthetic furnished room for the demo (procedural textures, ray-cast "selfie" frames).
+  // ---------------------------------------------------------------------------------------------
+  const DEMO_ROOM = { phi: 14 * DEG, d: [2.3, 1.7, 2.6, 1.9], floor: 1.35, ceiling: 1.15 };
+  function demoColor(face, s, t) {
+    const mix = (a, b, x) => [a[0] + (b[0] - a[0]) * x, a[1] + (b[1] - a[1]) * x, a[2] + (b[2] - a[2]) * x];
+    const inR = (s0, s1, t0, t1) => s >= s0 && s <= s1 && t >= t0 && t <= t1;
+    let c;
+    if (face === 'front') { // sage wall, window with frame and bars, radiator
+      c = [178, 196, 172];
+      if (inR(0.33, 0.67, 0.18, 0.58)) {
+        c = inR(0.345, 0.655, 0.195, 0.565) ? mix([150, 200, 240], [210, 232, 248], (t - 0.2) / 0.36) : [245, 245, 240];
+        if (Math.abs(s - 0.5) < 0.006 || Math.abs(t - 0.38) < 0.006) c = [245, 245, 240];
+      }
+      if (inR(0.36, 0.64, 0.66, 0.78)) c = ((s * 60) % 1) < 0.5 ? [225, 225, 222] : [205, 205, 200];
+    } else if (face === 'right') { // beige wall, door, picture
+      c = [222, 206, 182];
+      if (inR(0.12, 0.34, 0.22, 1)) { c = [128, 84, 52]; if (inR(0.3, 0.315, 0.58, 0.62)) c = [220, 190, 90]; if (inR(0.14, 0.32, 0.25, 0.5) || inR(0.14, 0.32, 0.55, 0.95)) c = mix(c, [150, 104, 70], 0.4); }
+      if (inR(0.52, 0.82, 0.26, 0.48)) c = inR(0.535, 0.805, 0.28, 0.46) ? (s < 0.63 ? [218, 86, 64] : s < 0.72 ? [244, 190, 72] : [64, 120, 196]) : [40, 34, 30];
+    } else if (face === 'back') { // blue-grey wall, bookshelf
+      c = [176, 188, 204];
+      if (inR(0.28, 0.72, 0.28, 1)) {
+        c = [96, 66, 44];
+        const shelf = ((t - 0.28) / 0.72 * 4) % 1;
+        if (shelf > 0.12 && s > 0.295 && s < 0.705) { const b = Math.floor(s * 90); c = [[200, 70, 60], [60, 120, 180], [230, 190, 80], [80, 150, 100], [150, 90, 170], [230, 230, 220]][b % 6]; if (shelf < 0.3) c = mix(c, [40, 30, 24], 0.6); }
+      }
+    } else if (face === 'left') { // warm yellow wall, TV, floor lamp
+      c = [236, 214, 150];
+      if (inR(0.3, 0.74, 0.3, 0.56)) c = inR(0.31, 0.73, 0.315, 0.545) ? mix([20, 26, 40], [40, 60, 90], s) : [12, 12, 14];
+      if (inR(0.84, 0.86, 0.3, 1)) c = [60, 60, 60];
+      if (inR(0.8, 0.9, 0.22, 0.32)) c = [250, 236, 200];
+    } else if (face === 'floor') { // oak planks + rug
+      const plank = Math.floor(s * 16), g = ((plank * 37) % 7) / 7;
+      c = mix([170, 124, 82], [196, 150, 104], g);
+      if (((s * 16) % 1) < 0.04) c = [120, 84, 56];
+      if (inR(0.25, 0.75, 0.3, 0.7)) c = inR(0.27, 0.73, 0.32, 0.68) ? [168, 58, 66] : [236, 220, 196];
+    } else { // ceiling with a round light
+      c = [240, 240, 236];
+      const dx = s - 0.5, dy = t - 0.5;
+      if (dx * dx + dy * dy < 0.004) c = [255, 248, 220];
+    }
+    return c;
+  }
+  // Ray-cast one synthetic selfie frame of the demo room from camera position pos.
+  function renderDemoFrame(room, cam, w, h, fovLong, exposure = 1, pos = [0, 0, 0]) {
+    const data = new Uint8ClampedArray(w * h * 4);
+    // face parametrisations are linear in (s,t): precompute origin and edge vectors once
+    const faces = faceGeometry(room).map(f => {
+      const P00 = f.P(0, 0), Ps = f.P(1, 0), Pt = f.P(0, 1), es = [Ps[0] - P00[0], Ps[1] - P00[1], Ps[2] - P00[2]], et = [Pt[0] - P00[0], Pt[1] - P00[1], Pt[2] - P00[2]];
+      return { name: f.name, P00, es, et, ess: dot(es, es), ett: dot(et, et) };
+    });
+    for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
+      const r = camRay(cam, w, h, fovLong, px, py), hit = boxHit(room, r, pos), tBest = hit.t, f = faces[hit.face];
+      const q = [pos[0] + r[0] * tBest - f.P00[0], pos[1] + r[1] * tBest - f.P00[1], pos[2] + r[2] * tBest - f.P00[2]];
+      const s = clamp(dot(q, f.es) / f.ess, 0, 1), t = clamp(dot(q, f.et) / f.ett, 0, 1);
+      const c = demoColor(f.name, s, t), shade = exposure * (0.92 + 0.08 * Math.min(1, 2 / tBest)), o = (py * w + px) * 4;
+      data[o] = c[0] * shade; data[o + 1] = c[1] * shade; data[o + 2] = c[2] * shade; data[o + 3] = 255;
+    }
+    return data;
+  }
+  // Sonar echo paths for an aim in a box room, phone at pos: each surface returns from its
+  // perpendicular foot, weighted by a broad beam pattern (earpiece-like) plus omnidirectional leakage.
+  function roomEchoPaths(room, aim, c, spacing, ampAt, pos = [0, 0, 0]) {
+    const surf = [];
+    for (let k = 0; k < 4; k++) { const n = wallNormal(room.phi, k); surf.push({ n, r: room.d[k] - dot(pos, n) }); }
+    surf.push({ n: [0, -1, 0], r: room.floor + pos[1] }, { n: [0, 1, 0], r: room.ceiling - pos[1] });
+    const out = [];
+    for (const sf of surf) {
+      const cosA = dot(aim, sf.n), g = Math.max(0, cosA) ** 1.5 * 0.85 + 0.15;
+      out.push({ delay: (2 * sf.r - spacing) / c, amp: ampAt(sf.r) * g });
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // WebGL dollhouse: textured box with inward-facing triangles and back-face culling, so walls
+  // between the camera and the room disappear (cut-away view). Also an inside "photo sphere" view.
+  // ---------------------------------------------------------------------------------------------
+  function mat4Persp(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0];
+  }
+  function mat4LookAt(eye, at, up) {
+    const z = norm3([eye[0] - at[0], eye[1] - at[1], eye[2] - at[2]]);
+    const x = norm3([up[1] * z[2] - up[2] * z[1], up[2] * z[0] - up[0] * z[2], up[0] * z[1] - up[1] * z[0]]);
+    const y = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]];
+    return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, -dot(x, eye), -dot(y, eye), -dot(z, eye), 1];
+  }
+  function mat4Mul(a, b) {
+    const o = new Array(16).fill(0);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k]; o[c * 4 + r] = s; }
+    return o;
+  }
+  class DollhouseView {
+    constructor(canvas) {
+      this.canvas = canvas;
+      const gl = this.gl = canvas.getContext('webgl', { antialias: true, alpha: false, preserveDrawingBuffer: true });
+      if (!gl) throw Error('WebGL unavailable');
+      const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(s)); return s; };
+      const prog = (vs, fs) => { const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(p)); return p; };
+      this.tex = prog('attribute vec3 aP;attribute vec2 aT;uniform mat4 uM;varying vec2 vT;void main(){vT=aT;gl_Position=uM*vec4(aP,1.0);}',
+        'precision mediump float;varying vec2 vT;uniform sampler2D uS;uniform float uK;void main(){vec2 e=min(vT,1.0-vT);float r=smoothstep(0.0,0.012,min(e.x,e.y));gl_FragColor=vec4(texture2D(uS,vT).rgb*uK*(0.82+0.18*r),1.0);}');
+      this.flat = prog('attribute vec3 aP;uniform mat4 uM;uniform float uZ;void main(){gl_Position=uM*vec4(aP,1.0);gl_PointSize=uZ;}',
+        'precision mediump float;uniform vec4 uC;void main(){gl_FragColor=uC;}');
+      this.buf = gl.createBuffer(); this.faces = []; this.room = null; this.points = null;
+      this.cam = { yaw: -0.55, pitch: 0.75, dist: 9, mode: 'dollhouse' };
+    }
+    setRoom(room, textures) { this.setTextures(textures); this.setGeometry(room); }
+    setTextures(textures) {
+      const gl = this.gl;
+      for (const t of this.texs || []) gl.deleteTexture(t);
+      this.texs = textures.map(t => {
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, t.w, t.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(t.data.buffer, t.data.byteOffset, t.data.byteLength));
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return tex;
+      });
+    }
+    // Geometry only (keeps the textures): cheap enough to follow a slider while it is dragged.
+    setGeometry(room) {
+      const gl = this.gl;
+      for (const f of this.faces) gl.deleteBuffer(f.buf);
+      this.room = { phi: room.phi, d: room.d.slice(), floor: room.floor, ceiling: room.ceiling }; this.faces = [];
+      faceGeometry(this.room).forEach((g, i) => {
+        // two triangles, wound counter-clockwise as seen from INSIDE the room
+        const c = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([s, tt]) => [...g.P(s, tt), s, tt]);
+        const e1 = [c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]], e2 = [c[2][0] - c[0][0], c[2][1] - c[0][1], c[2][2] - c[0][2]];
+        const nx = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        const order = dot(nx, g.inward) > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+        const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(order.flatMap(k => c[k])), gl.STATIC_DRAW);
+        this.faces.push({ tex: (this.texs || [])[i], buf: b, shade: g.name === 'floor' ? 0.9 : g.name === 'ceiling' ? 0.96 : 1 });
+      });
+      if (!this.cam.target) this.cam.target = this.center();
+    }
+    setPoints(xyz) { // optional sonar points overlay
+      const gl = this.gl; this.points = xyz && xyz.length ? { n: xyz.length / 3, buf: gl.createBuffer() } : null;
+      if (this.points) { gl.bindBuffer(gl.ARRAY_BUFFER, this.points.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(xyz), gl.STATIC_DRAW); }
+    }
+    center() {
+      const r = this.room; if (!r) return [0, 0, 0];
+      const n0 = wallNormal(r.phi, 0), n1 = wallNormal(r.phi, 1), a = (r.d[0] - r.d[2]) / 2, b = (r.d[1] - r.d[3]) / 2;
+      return [n0[0] * a + n1[0] * b, (r.ceiling - r.floor) / 2, n0[2] * a + n1[2] * b];
+    }
+    render() {
+      const gl = this.gl, cv = this.canvas, W = cv.width, H = cv.height;
+      gl.viewport(0, 0, W, H); gl.clearColor(0.035, 0.09, 0.15, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      if (!this.room) return;
+      gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+      const c = this.cam, aspect = W / Math.max(1, H);
+      let M;
+      if (c.mode === 'inside') {
+        const dir = dirFrom(c.yaw, -c.pitch * 0.9);
+        M = mat4Mul(mat4Persp(clamp(c.fov || 75 * DEG, 30 * DEG, 110 * DEG), aspect, 0.05, 50), mat4LookAt([0, 0, 0], dir, [0, 1, 0]));
+      } else {
+        const t = c.target || [0, 0, 0], eye = [t[0] + c.dist * Math.sin(c.yaw) * Math.cos(c.pitch), t[1] + c.dist * Math.sin(c.pitch), t[2] + c.dist * Math.cos(c.yaw) * Math.cos(c.pitch)];
+        M = mat4Mul(mat4Persp(40 * DEG, aspect, 0.1, 100), mat4LookAt(eye, t, [0, 1, 0]));
+      }
+      gl.useProgram(this.tex);
+      const aP = gl.getAttribLocation(this.tex, 'aP'), aT = gl.getAttribLocation(this.tex, 'aT');
+      gl.uniformMatrix4fv(gl.getUniformLocation(this.tex, 'uM'), false, new Float32Array(M));
+      gl.uniform1i(gl.getUniformLocation(this.tex, 'uS'), 0); gl.activeTexture(gl.TEXTURE0);
+      for (const f of this.faces) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, f.buf);
+        gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 20, 0);
+        gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 2, gl.FLOAT, false, 20, 12);
+        gl.bindTexture(gl.TEXTURE_2D, f.tex); gl.uniform1f(gl.getUniformLocation(this.tex, 'uK'), f.shade);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+      gl.disableVertexAttribArray(aT);
+      // capture point marker and optional sonar points
+      gl.useProgram(this.flat);
+      const fP = gl.getAttribLocation(this.flat, 'aP');
+      gl.uniformMatrix4fv(gl.getUniformLocation(this.flat, 'uM'), false, new Float32Array(M));
+      const draw = (arr, n, color, size, mode) => {
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(arr), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(fP); gl.vertexAttribPointer(fP, 3, gl.FLOAT, false, 0, 0);
+        gl.uniform4fv(gl.getUniformLocation(this.flat, 'uC'), color); gl.uniform1f(gl.getUniformLocation(this.flat, 'uZ'), size);
+        gl.drawArrays(mode, 0, n);
+      };
+      if (c.mode !== 'inside') {
+        gl.disable(gl.DEPTH_TEST);
+        draw([0, 0, 0], 1, [0.22, 0.89, 0.8, 1], 7 * Math.min(2, window.devicePixelRatio || 1), gl.POINTS);
+        draw([0, 0, 0, 0, -this.room.floor, 0], 2, [0.22, 0.89, 0.8, 0.8], 1, gl.LINES);
+        gl.enable(gl.DEPTH_TEST);
+        if (this.points && c.showPoints) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, this.points.buf); gl.enableVertexAttribArray(fP); gl.vertexAttribPointer(fP, 3, gl.FLOAT, false, 0, 0);
+          gl.uniform4fv(gl.getUniformLocation(this.flat, 'uC'), [0.96, 0.75, 0.44, 1]); gl.uniform1f(gl.getUniformLocation(this.flat, 'uZ'), 3 * (window.devicePixelRatio || 1));
+          gl.drawArrays(gl.POINTS, 0, this.points.n);
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // GLB export (glTF 2.0 binary): one mesh, six textured primitives, unlit materials, single-sided
+  // with inward-facing triangles so viewers show the same cut-away dollhouse.
+  // pngs: six PNG ArrayBuffers in faceGeometry order.
+  // ---------------------------------------------------------------------------------------------
+  function buildGLB(room, pngs) {
+    const geo = faceGeometry(room), chunks = [], views = [], accessors = [], images = [], textures = [], materials = [], prims = [];
+    let offset = 0;
+    const push = (bytes, target) => {
+      const pad = (4 - (bytes.byteLength % 4)) % 4, u8 = new Uint8Array(bytes.byteLength + pad); u8.set(new Uint8Array(bytes.buffer || bytes, bytes.byteOffset || 0, bytes.byteLength));
+      chunks.push(u8); views.push(Object.assign({ buffer: 0, byteOffset: offset, byteLength: bytes.byteLength }, target ? { target } : {})); offset += u8.byteLength; return views.length - 1;
+    };
+    geo.forEach((g, i) => {
+      const c = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([s, t]) => g.P(s, t));
+      const e1 = [c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]], e2 = [c[2][0] - c[0][0], c[2][1] - c[0][1], c[2][2] - c[0][2]];
+      const nx = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const idx = new Uint16Array(dot(nx, g.inward) > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2]);
+      const pos = new Float32Array(c.flat()), uv = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]);
+      const mn = [0, 1, 2].map(a => Math.min(...c.map(p => p[a]))), mx = [0, 1, 2].map(a => Math.max(...c.map(p => p[a])));
+      accessors.push({ bufferView: push(pos, 34962), componentType: 5126, count: 4, type: 'VEC3', min: mn, max: mx });
+      accessors.push({ bufferView: push(uv, 34962), componentType: 5126, count: 4, type: 'VEC2' });
+      accessors.push({ bufferView: push(idx, 34963), componentType: 5123, count: 6, type: 'SCALAR' });
+      images.push({ bufferView: push(new Uint8Array(pngs[i]), null), mimeType: 'image/png', name: g.name });
+      textures.push({ source: i, sampler: 0 });
+      materials.push({ name: g.name, pbrMetallicRoughness: { baseColorTexture: { index: i }, metallicFactor: 0, roughnessFactor: 1 }, extensions: { KHR_materials_unlit: {} } });
+      prims.push({ attributes: { POSITION: i * 3, TEXCOORD_0: i * 3 + 1 }, indices: i * 3 + 2, material: i });
+    });
+    const json = {
+      asset: { version: '2.0', generator: 'EchoScope room capture' }, extensionsUsed: ['KHR_materials_unlit'],
+      scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0, name: 'room' }], meshes: [{ primitives: prims, name: 'dollhouse' }],
+      buffers: [{ byteLength: offset }], bufferViews: views, accessors, images, textures, materials,
+      samplers: [{ magFilter: 9729, minFilter: 9729, wrapS: 33071, wrapT: 33071 }]
+    };
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(json)), jpad = (4 - (jsonBytes.length % 4)) % 4;
+    const total = 12 + 8 + jsonBytes.length + jpad + 8 + offset, out = new Uint8Array(total), dv = new DataView(out.buffer);
+    dv.setUint32(0, 0x46546C67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+    dv.setUint32(12, jsonBytes.length + jpad, true); dv.setUint32(16, 0x4E4F534A, true); out.set(jsonBytes, 20); out.fill(0x20, 20 + jsonBytes.length, 20 + jsonBytes.length + jpad);
+    let p = 20 + jsonBytes.length + jpad; dv.setUint32(p, offset, true); dv.setUint32(p + 4, 0x004E4942, true); p += 8;
+    for (const c of chunks) { out.set(c, p); p += c.byteLength; }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // USDZ for AR Quick Look (iPhone/iPad): an uncompressed zip whose entries start on 64-byte
+  // boundaries, holding a USDA layer plus the face PNGs. Faces are single-sided and face inward, so
+  // the near walls drop away in AR exactly as in the viewer. Materials are emissive-only so the
+  // photographed lighting is shown as captured. Default scale 1:10 with the floor at y = 0.
+  // ---------------------------------------------------------------------------------------------
+  const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function zipStore(files) {
+    const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+    for (const f of files) {
+      const name = enc.encode(f.name), data = f.data, crc = crc32(data);
+      let pad = (64 - ((off + 30 + name.length) % 64)) % 64; if (pad > 0 && pad < 4) pad += 64;
+      const hdr = new Uint8Array(30 + name.length + pad), dv = new DataView(hdr.buffer);
+      dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true); dv.setUint16(12, 0x21, true);
+      dv.setUint32(14, crc, true); dv.setUint32(18, data.length, true); dv.setUint32(22, data.length, true);
+      dv.setUint16(26, name.length, true); dv.setUint16(28, pad, true); hdr.set(name, 30);
+      if (pad) { dv.setUint16(30 + name.length, 0x1986, true); dv.setUint16(32 + name.length, pad - 4, true); }
+      parts.push(hdr, data); central.push({ name, crc, size: data.length, off }); off += hdr.length + data.length;
+    }
+    const cd = off;
+    for (const c of central) {
+      const h = new Uint8Array(46 + c.name.length), dv = new DataView(h.buffer);
+      dv.setUint32(0, 0x02014b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 20, true); dv.setUint16(14, 0x21, true);
+      dv.setUint32(16, c.crc, true); dv.setUint32(20, c.size, true); dv.setUint32(24, c.size, true); dv.setUint16(28, c.name.length, true);
+      dv.setUint32(42, c.off, true); h.set(c.name, 46); parts.push(h); off += h.length;
+    }
+    const end = new Uint8Array(22), dv = new DataView(end.buffer);
+    dv.setUint32(0, 0x06054b50, true); dv.setUint16(8, central.length, true); dv.setUint16(10, central.length, true);
+    dv.setUint32(12, off - cd, true); dv.setUint32(16, cd, true); parts.push(end);
+    const out = new Uint8Array(off + 22); let p = 0; for (const x of parts) { out.set(x, p); p += x.length; }
+    return out;
+  }
+  function buildUSDZ(room, pngs, opts = {}) {
+    const scale = opts.scale ?? 0.1, geo = faceGeometry(room), n0 = wallNormal(room.phi, 0), n1 = wallNormal(room.phi, 1);
+    const a = (room.d[0] - room.d[2]) / 2, b = (room.d[1] - room.d[3]) / 2, ctr = [n0[0] * a + n1[0] * b, -room.floor, n0[2] * a + n1[2] * b];
+    const f3 = v => `(${v.map(x => (+x).toFixed(5)).join(', ')})`, f2 = v => `(${v.map(x => (+x).toFixed(5)).join(', ')})`;
+    let usda = `#usda 1.0\n(\n    customLayerData = {\n        string creator = "EchoScope room capture"\n    }\n    defaultPrim = "Room"\n    metersPerUnit = 1\n    upAxis = "Y"\n)\n\ndef Xform "Room" (\n    assetInfo = {\n        string name = "Room"\n    }\n    kind = "component"\n)\n{\n`;
+    geo.forEach(g => {
+      const c = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([s, t]) => g.P(s, t));
+      const e1 = [c[1][0] - c[0][0], c[1][1] - c[0][1], c[1][2] - c[0][2]], e2 = [c[2][0] - c[0][0], c[2][1] - c[0][1], c[2][2] - c[0][2]];
+      const nx = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      const idx = dot(nx, g.inward) > 0 ? [0, 1, 2, 3] : [0, 3, 2, 1];
+      const pts = c.map(p => [(p[0] - ctr[0]) * scale, (p[1] - ctr[1]) * scale, (p[2] - ctr[2]) * scale]);
+      const st = [[0, 1], [1, 1], [1, 0], [0, 0]]; // image row 0 is the top of the face (t = 0)
+      const m = `/Room/Materials/${g.name}`;
+      usda += `    def Mesh "${g.name}" (\n        prepend apiSchemas = ["MaterialBindingAPI"]\n    )\n    {\n` +
+        `        int[] faceVertexCounts = [4]\n        int[] faceVertexIndices = [${idx.join(', ')}]\n` +
+        `        point3f[] points = [${pts.map(f3).join(', ')}]\n` +
+        `        normal3f[] normals = [${f3(g.inward)}] (\n            interpolation = "uniform"\n        )\n` +
+        `        texCoord2f[] primvars:st = [${st.map(f2).join(', ')}] (\n            interpolation = "vertex"\n        )\n` +
+        `        uniform token subdivisionScheme = "none"\n        uniform bool doubleSided = 0\n        rel material:binding = <${m}>\n    }\n`;
+    });
+    usda += `    def Scope "Materials"\n    {\n`;
+    geo.forEach(g => {
+      const m = `/Room/Materials/${g.name}`;
+      usda += `        def Material "${g.name}"\n        {\n            token outputs:surface.connect = <${m}/Surface.outputs:surface>\n` +
+        `            def Shader "Surface"\n            {\n                uniform token info:id = "UsdPreviewSurface"\n                color3f inputs:diffuseColor = (0, 0, 0)\n` +
+        `                color3f inputs:emissiveColor.connect = <${m}/Tex.outputs:rgb>\n                float inputs:metallic = 0\n                float inputs:roughness = 1\n                token outputs:surface\n            }\n` +
+        `            def Shader "Tex"\n            {\n                uniform token info:id = "UsdUVTexture"\n                asset inputs:file = @textures/${g.name}.png@\n` +
+        `                float2 inputs:st.connect = <${m}/St.outputs:result>\n                token inputs:sourceColorSpace = "sRGB"\n                token inputs:wrapS = "clamp"\n                token inputs:wrapT = "clamp"\n                float3 outputs:rgb\n            }\n` +
+        `            def Shader "St"\n            {\n                uniform token info:id = "UsdPrimvarReader_float2"\n                string inputs:varname = "st"\n                float2 outputs:result\n            }\n        }\n`;
+    });
+    usda += `    }\n}\n`;
+    const files = [{ name: 'room.usda', data: new TextEncoder().encode(usda) }];
+    geo.forEach((g, i) => files.push({ name: `textures/${g.name}.png`, data: new Uint8Array(pngs[i]) }));
+    return zipStore(files);
+  }
+  // Fill a panorama's unphotographed pixels (export): push-pull inpainting, gently dimmed.
+  function fillPanorama(img) {
+    const { w, h, data } = img, rgb = new Float32Array(w * h * 3), alpha = new Float32Array(w * h), out = new Uint8ClampedArray(w * h * 4);
+    for (let k = 0; k < w * h; k++) { alpha[k] = data[k * 4 + 3] / 255; rgb[k * 3] = data[k * 4]; rgb[k * 3 + 1] = data[k * 4 + 1]; rgb[k * 3 + 2] = data[k * 4 + 2]; }
+    const any = pushPull(rgb, alpha, w, h);
+    for (let k = 0; k < w * h; k++) {
+      const dim = 0.88 + 0.12 * alpha[k];
+      out[k * 4] = any ? rgb[k * 3] * dim : 30; out[k * 4 + 1] = any ? rgb[k * 3 + 1] * dim : 40; out[k * 4 + 2] = any ? rgb[k * 3 + 2] * dim : 52; out[k * 4 + 3] = 255;
+    }
+    return { w, h, data: out };
+  }
+  const roomSize = r => { const w = r.d[1] + r.d[3], l = r.d[0] + r.d[2]; return { width: w, length: l, height: r.floor + r.ceiling, area: w * l }; };
+  return { DEG, wrap, dirFrom, yawOf, pitchOf, wallNormal, fitRoom, boxHit, phonePos, camProject, camRay, Panorama, sampleEquirect, faceGeometry, faceTextures, pushPull, DEMO_ROOM, demoColor, renderDemoFrame, roomEchoPaths, DollhouseView, buildGLB, buildUSDZ, zipStore, crc32, fillPanorama, roomSize };
+});
+</script>
+<script>
+/* EchoScope app v2.0 — UI, audio I/O, orientation, stereo triangulation, room capture and rendering.
+   DSP lives in EchoDSP; room fitting, photo stitching, WebGL dollhouse and exports in EchoRoom. */
 (() => {
   'use strict';
-  const D = window.EchoDSP;
+  const D = window.EchoDSP, RM = window.EchoRoom;
   const $ = id => document.getElementById(id);
   const DEG = Math.PI / 180, MAX_POINTS = 4000, RING = 1 << 17, DEMO_SPEED = 3, BASELINE_CHIRPS = 20, VOX = 0.03;
   const BANDS = {
@@ -745,22 +1487,24 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     near: [15000, 20000, '15–20 kHz sweep'],
     audible: [1000, 4000, '1–4 kHz sweep']
   };
-  // Device-frame beam axis, and the fixed rotation that maps that axis to scene "forward" (−z).
-  const AXES = {
-    back: { v: [0, 0, -1], q: [1, 0, 0, 0] },
-    bottom: { v: [0, -1, 0], q: [0, 0, Math.SQRT1_2, Math.SQRT1_2] },
-    screen: { v: [0, 0, 1], q: [0, 0, 1, 0] }
-  };
+  // Device-frame beam axis (W3C device coordinates: x right, y top, z out of the screen).
+  const AXES = { back: { v: [0, 0, -1] }, bottom: { v: [0, -1, 0] }, screen: { v: [0, 0, 1] } };
+  // Room capture: photo every ROOM_SHOT_DEG of view change, long side ROOM_FRAME_LONG px.
+  const ROOM_SHOT_DEG = 8, ROOM_FRAME_LONG = 192, ROOM_MAX_FRAMES = 160, ROOM_MAX_REC = 900, ROOM_VIDEO_LAG_MS = 70, ROOM_MAX_S = 150;
   const HINTS = {
     sensors: 'Phone on HTTPS: hold still while the chirp locks, then sweep slowly. Each echo is placed along the measured aim.',
     stereo: 'Laptop on a desk: the two speakers take turns, and the difference in echo path lengths places reflectors left–right. Nothing has to move.',
-    manual: 'Every echo is drawn along the slider direction. A device that is not moving cannot sense where an echo came from, so this gives a single line.'
+    manual: 'Every echo is drawn along the slider direction. A device that is not moving cannot sense where an echo came from, so this gives a single line.',
+    room: 'Phone on HTTPS: the earpiece sonar measures where the walls, floor and ceiling are while the selfie camera photographs them. Together they become a textured 3D dollhouse you can orbit, export, or open in AR.'
   };
 
   const ids = ['startBtn', 'quickDemo', 'demo', 'aimMode', 'aimHint', 'manualPanel', 'stereoPanel', 'aimYaw', 'aimPitch', 'spkSpacing', 'elev',
     'band', 'duration', 'period', 'volume', 'threshold', 'average', 'minRange', 'maxRange', 'spacing', 'temp', 'axis', 'baseBtn', 'baseClear',
     'baseState', 'baseHelp', 'message', 'status', 'statusText', 'scene', 'viewport', 'profile', 'clearBtn', 'zeroBtn', 'exportBtn',
-    'sensorsPanel', 'mStart', 'mClear', 'mZero'];
+    'sensorsPanel', 'mStart', 'mClear', 'mZero', 'roomPanel', 'camFov', 'armRadius', 'frameRot', 'camMirror', 'voice', 'roomGl', 'roomLive',
+    'roomPrompt', 'camPreview', 'panoPreview', 'mTurn', 'mFloor', 'mCeil', 'mShots', 'roomTools', 'roomSummary', 'viewSeg', 'showPts', 'arLink', 'arImg',
+    'roomAdjust', 'fitNote', 'wallF', 'wallR', 'wallB', 'wallL', 'floorH', 'ceilH', 'roomRot', 'refitBtn', 'glbBtn', 'usdzBtn', 'panoBtn', 'baselineBox',
+    'reticle', 'corner', 'hud', 'viewTitle'];
   const ui = {}; for (const id of ids) ui[id] = $(id);
 
   const state = {
@@ -770,7 +1514,7 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     sr: 48000, f0: 18000, f1: 22000,
     points: [], cells: new Map(), voxels: new Map(), links: [], linksDirty: false,
     frame: null, profValid: false, lastEcho: null, lastEchoAt: 0,
-    sensorsSeen: false, rawQuat: [1, 0, 0, 0], zeroQuat: null, relative: { alpha: 0, beta: 0, gamma: 0 },
+    sensorsSeen: false, rawQuat: [1, 0, 0, 0], zeroHeading: null, quatLog: [], relative: { alpha: 0, beta: 0, gamma: 0 },
     beam: [0, 0, -1], aimLog: [], demoStep: 0,
     camera: { yaw: -0.6, pitch: 0.29, dist: 8.2, tz: 0 }, pointers: new Map(), gesture: null,
     sceneDirty: true, profDirty: true, lastUi: 0, perf: { dsp: 0, draw: 0 }
@@ -795,6 +1539,9 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   function setMobileStart(on) { ui.mStart.textContent = on ? '■ Stop' : '▶ Start'; ui.mStart.classList.toggle('running', on); }
   const aimMode = () => ui.aimMode.value;
+  const roomMode = () => aimMode() === 'room';
+  const startLabel = () => roomMode() ? '▶ Start room capture' : '▶ Start scan';
+  const stopLabel = () => roomMode() ? '■ Stop & build room' : '■ Stop scan';
   const manualMode = () => aimMode() === 'manual';
   const hasAim = () => state.mode === 'demo' || manualMode() || state.sensorsSeen;
   const stereoB = () => +ui.spkSpacing.value / 100;
@@ -818,20 +1565,22 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     setText('spacingVal', ui.spacing.value + ' cm'); setText('tempVal', ui.temp.value + ' °C');
     setText('aimYawVal', ui.aimYaw.value + '°'); setText('aimPitchVal', ui.aimPitch.value + '°');
     setText('spkSpacingVal', ui.spkSpacing.value + ' cm'); setText('elevVal', ui.elev.value + '°');
+    setText('armRadiusVal', ui.armRadius.value + ' cm'); setText('camFovVal', ui.camFov.value + '°');
     setText('sweepLabel', (BANDS[ui.band.value] || BANDS.ultra)[2] + (state.stereo ? ' · L↑ R↓' : ''));
   }
   function lockSignal(on) {
     for (const e of [ui.demo, ui.band, ui.duration, ui.period, ui.maxRange, ui.spkSpacing]) e.disabled = on;
     ui.baseBtn.disabled = !on; ui.baseClear.disabled = !on;
     // Stereo needs its own output buffer and pipelines: it can only be entered or left between runs.
-    ui.aimMode.disabled = on && !!state.stereo;
-    for (const o of ui.aimMode.options) o.disabled = on && !state.stereo && o.value === 'stereo';
+    // Room capture needs the camera stream and its own recorder: also only between runs.
+    ui.aimMode.disabled = on && (!!state.stereo || roomMode());
+    for (const o of ui.aimMode.options) o.disabled = on && !state.stereo && !roomMode() && (o.value === 'stereo' || o.value === 'room');
   }
 
   // ---------------------------------------------------------------- point cloud
   function setCounts() {
     const n = state.points.length;
-    setText('pointCount', String(n)); setText('hudSamples', `POINTS: ${n} / ${MAX_POINTS}`);
+    setText('pointCount', String(n)); if (!ROOM.shown) setText('hudSamples', `POINTS: ${n} / ${MAX_POINTS}`);
     setText('cloudHint', n ? `${n} ${state.cloudKey && state.cloudKey.startsWith('demo') ? 'synthetic' : 'estimated'} samples captured` : 'No measured points yet');
   }
   function clearCloud() {
@@ -855,15 +1604,21 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     state.linksDirty = true; state.sceneDirty = true; setCounts();
     return true;
   }
-  function addPoint(distance, beam, snr) {
+  function addPoint(distance, beam, snr, origin) {
     const s = settings();
     if (!(distance >= s.minRange && distance <= s.maxRange)) return false;
-    return addXYZ(beam[0] * distance, beam[1] * distance, beam[2] * distance, distance, snr);
+    const o = origin || [0, 0, 0];
+    return addXYZ(o[0] + beam[0] * distance, o[1] + beam[1] * distance, o[2] + beam[2] * distance, distance, snr);
+  }
+  const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
+  function download(blob, name) {
+    const u = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000);
   }
   function savePLY() {
     if (!state.points.length) { setMessage('No points to export. Scan or run the demo first.', 'warn'); return; }
     const maxR = +ui.maxRange.value, lines = [
-      'ply', 'format ascii 1.0', 'comment EchoScope v1.3 experimental point cloud (not metrically calibrated)',
+      'ply', 'format ascii 1.0', 'comment EchoScope v2.0 experimental point cloud (not metrically calibrated)',
       'comment ' + (state.stereo ? 'stereo triangulation: x along speaker axis, rotation about that axis assumed' : 'aimed sonar: points placed along the beam'),
       'comment quality = echo SNR in dB above the local CFAR floor',
       'element vertex ' + state.points.length, 'property float x', 'property float y', 'property float z',
@@ -872,10 +1627,7 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
       const t = Math.min(1, p.range / maxR);
       lines.push(`${p.x.toFixed(5)} ${p.y.toFixed(5)} ${p.z.toFixed(5)} ${Math.round(55 + 100 * t)} ${Math.round(240 - 60 * t)} ${Math.round(205 + 40 * t)} ${fmt(p.snr, 2)}`);
     }
-    const u = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'application/octet-stream' }));
-    const a = document.createElement('a');
-    a.href = u; a.download = 'echoscope-' + (state.cloudKey || 'scan').replace(':', '-') + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.ply';
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 3000);
+    download(new Blob([lines.join('\n') + '\n'], { type: 'application/octet-stream' }), 'echoscope-' + (state.cloudKey || 'scan').replace(':', '-') + '-' + stamp() + '.ply');
   }
 
   // ---------------------------------------------------------------- orientation (quaternions, W3C Z-X'-Y'')
@@ -885,28 +1637,44 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   const qnorm = q => { const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return [q[0] / n, q[1] / n, q[2] / n, q[3] / n]; };
   const qrotate = (q, v) => qmul(qmul(q, [0, v[0], v[1], v[2]]), qconj(q)).slice(1);
   const orientationQuat = (a, b, g) => qnorm(qmul(qmul(qaxis('z', a * DEG), qaxis('x', b * DEG)), qaxis('y', g * DEG)));
-  function relativeEuler(q) {
-    const [w, x, y, z] = q, cl = v => clamp(v, -1, 1);
-    return {
-      alpha: Math.atan2(-2 * (x * y - w * z), 1 - 2 * (x * x + z * z)) / DEG,
-      beta: Math.asin(cl(2 * (y * z + w * x))) / DEG,
-      gamma: Math.atan2(-2 * (x * z - w * y), 1 - 2 * (x * x + y * y)) / DEG
-    };
+  // Scene frame for the sensor modes: gravity-aligned (y up) with forward (−z) = the beam's heading at
+  // the zero instant. Only the heading is zeroed, so pitch and roll stay absolute: a tilted start no
+  // longer tilts the whole map, and floor/ceiling are where gravity says. rawQuat maps device → Earth
+  // (W3C: x east, y north, z up).
+  const beamAxis = () => roomMode() ? 'screen' : ui.axis.value;
+  function headingOf(q, v) { const e = qrotate(q, v); return Math.hypot(e[0], e[1]) > 0.25 ? Math.atan2(e[0], e[1]) : null; }
+  function referenceHeading(q) {
+    const ax = AXES[beamAxis()] || AXES.back;
+    let h = headingOf(q, ax.v);
+    if (h == null) h = headingOf(q, beamAxis() === 'bottom' ? [0, 0, 1] : [0, 1, 0]); // beam vertical: use the device top
+    return h == null ? 0 : h;
+  }
+  function toSceneQ(q, v, heading = state.zeroHeading || 0) {
+    const e = qrotate(q, v), c = Math.cos(heading), s = Math.sin(heading);
+    return [c * e[0] - s * e[1], e[2], -(s * e[0] + c * e[1])];
   }
   function sensorBeam() {
-    const ax = AXES[ui.axis.value] || AXES.back;
-    const rel = state.zeroQuat ? qmul(qconj(state.zeroQuat), state.rawQuat) : [1, 0, 0, 0];
-    state.relative = relativeEuler(rel);
-    state.beam = qrotate(ax.q, qrotate(rel, ax.v));
+    const ax = AXES[beamAxis()] || AXES.back, q = state.rawQuat, b = state.beam = toSceneQ(q, ax.v);
+    // shown angles: beam heading and elevation, and the device's roll about the beam
+    const ref = toSceneQ(q, beamAxis() === 'bottom' ? [0, 0, 1] : [0, 1, 0]), br = ref[0] * b[0] + ref[1] * b[1] + ref[2] * b[2];
+    const u1 = [-b[1] * b[0], 1 - b[1] * b[1], -b[1] * b[2]], u2 = [ref[0] - br * b[0], ref[1] - br * b[1], ref[2] - br * b[2]];
+    const cx = [u1[1] * u2[2] - u1[2] * u2[1], u1[2] * u2[0] - u1[0] * u2[2], u1[0] * u2[1] - u1[1] * u2[0]];
+    state.relative = {
+      alpha: Math.atan2(b[0], -b[2]) / DEG, beta: Math.asin(clamp(b[1], -1, 1)) / DEG,
+      gamma: Math.atan2(cx[0] * b[0] + cx[1] * b[1] + cx[2] * b[2], u1[0] * u2[0] + u1[1] * u2[1] + u1[2] * u2[2]) / DEG
+    };
   }
   function sensorEvent(e) {
-    if (state.mode === 'live' && aimMode() !== 'sensors') return;
+    if (state.mode === 'live' && aimMode() !== 'sensors' && aimMode() !== 'room') return;
     if (![e.alpha, e.beta, e.gamma].every(Number.isFinite)) return;
     state.sensorsSeen = true;
     state.rawQuat = orientationQuat(e.alpha, e.beta, e.gamma);
-    if (!state.zeroQuat) state.zeroQuat = state.rawQuat.slice();
-    if (state.mode !== 'demo') { sensorBeam(); setText('hudOrientation', 'ORIENTATION: DEVICE SENSOR · ' + ui.axis.value.toUpperCase() + ' AXIS'); state.sceneDirty = true; }
+    const log = state.quatLog; log.push({ t: performance.now(), q: state.rawQuat }); if (log.length > 160) log.splice(0, log.length - 160);
+    if (state.zeroHeading == null) state.zeroHeading = referenceHeading(state.rawQuat);
+    if (state.mode !== 'demo') { sensorBeam(); setText('hudOrientation', 'ORIENTATION: DEVICE SENSOR · ' + beamAxis().toUpperCase() + ' AXIS'); state.sceneDirty = true; }
   }
+  // Orientation at an earlier time (camera frames lag the sensors slightly).
+  function quatAt(t) { const log = state.quatLog; for (let i = log.length - 1; i >= 0; i--) if (log[i].t <= t) return log[i].q; return log.length ? log[0].q : state.rawQuat; }
   function requestSensors() {
     if (!window.isSecureContext || typeof DeviceOrientationEvent === 'undefined') return Promise.resolve();
     const promises = [];
@@ -926,7 +1694,11 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   }
   function updateAimMode() {
     const m = aimMode();
-    ui.manualPanel.hidden = m !== 'manual'; ui.stereoPanel.hidden = m !== 'stereo'; ui.sensorsPanel.hidden = m !== 'sensors';
+    ui.manualPanel.hidden = m !== 'manual'; ui.stereoPanel.hidden = m !== 'stereo'; ui.sensorsPanel.hidden = m !== 'sensors'; ui.roomPanel.hidden = m !== 'room';
+    ui.baselineBox.hidden = m === 'room'; // room capture removes static echoes itself (turn average)
+    ui.quickDemo.textContent = m === 'room' ? '✦ Run room-capture demo (no camera or mic needed)' : '✦ Run 3D demo (no microphone needed)';
+    if (!state.running && !state.busy) ui.startBtn.textContent = startLabel();
+    showRoom(m === 'room' && !!ROOM.room && !ROOM.capturing);
     setText('aimHint', HINTS[m] || '');
     setText('baseHelp', m === 'stereo'
       ? 'With a stationary laptop everything in the room is static, so a baseline removes the whole room — afterwards only things that move or appear are detected.'
@@ -942,7 +1714,8 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   function zeroOrientation() {
     if (state.stereo) setMessage('Stereo mode has no orientation to zero: positions come from the speaker geometry.');
     else if (state.mode !== 'demo' && manualMode()) { ui.aimYaw.value = '0'; ui.aimPitch.value = '0'; updateAimMode(); setMessage('Manual yaw and pitch reset to zero; plotted points are unchanged.'); }
-    else if (state.sensorsSeen && state.mode !== 'demo') { state.zeroQuat = state.rawQuat.slice(); sensorBeam(); state.sceneDirty = true; setMessage('Current phone orientation is now the forward reference. Earlier points stay in their original frame.'); }
+    else if (state.running && roomMode()) setMessage('The heading reference stays fixed during a room capture, so the photos and echoes line up.');
+    else if (state.sensorsSeen && state.mode !== 'demo') { state.zeroHeading = referenceHeading(state.rawQuat); sensorBeam(); state.sceneDirty = true; setMessage('The phone’s current heading is now “forward” (tilt stays measured from gravity). Earlier points stay in their original frame.'); }
     else if (state.mode === 'demo') { state.demoStep = 0; setMessage('Synthetic sweep restarted from the first raster position.'); }
     else setMessage('No device orientation received. Sensor permission may be unavailable or denied.', 'warn');
   }
@@ -1065,7 +1838,11 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     trackFrame(f, true);
     if (f.echo) {
       state.lastEcho = f.echo; state.lastEchoAt = performance.now();
-      if (hasAim()) addPoint(f.echo.distance, aimAt(f.direct + state.pipe.L / 2), f.echo.snrDb);
+      if (hasAim()) {
+        const b = aimAt(f.direct + state.pipe.L / 2);
+        // room capture: the phone circles the body axis, so echoes start from the phone's position
+        addPoint(f.echo.distance, b, f.echo.snrDb, roomMode() ? RM.phonePos({ fwd: b, up: [0, 1, 0] }, armRadius()) : null);
+      }
     }
   }
   function onStereoFrame(f, idx) {
@@ -1097,7 +1874,9 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   // ---------------------------------------------------------------- audio I/O
   async function setupCapture(ctx, stream) {
     state.micSource = ctx.createMediaStreamSource(stream);
-    const onChunk = chunk => { logAim(state.ring.total); state.ring.push(chunk); runPipeline(); };
+    // Audio-driven clock: room capture ticks here too, so photos keep coming even if the browser
+    // throttles animation frames.
+    const onChunk = chunk => { logAim(state.ring.total); state.ring.push(chunk); runPipeline(); if (ROOM.capturing) roomTick(); };
     if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
       const code = `class EchoTap extends AudioWorkletProcessor{constructor(){super();this.buf=new Float32Array(1024);this.pos=0;}process(inputs,outputs){const c=inputs[0]&&inputs[0][0];if(c){for(let i=0;i<c.length;i++){this.buf[this.pos++]=c[i];if(this.pos===this.buf.length){const b=this.buf;this.port.postMessage(b,[b.buffer]);this.buf=new Float32Array(1024);this.pos=0;}}}for(const o of outputs)for(const ch of o)ch.fill(0);return true;}}registerProcessor('echo-tap',EchoTap);`;
       // Blob URLs fail for worklet modules on file:// (opaque origin); a data: URL works there.
@@ -1144,16 +1923,18 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     if (state.running || state.busy) return;
     state.busy = true; ui.startBtn.disabled = true; ui.startBtn.textContent = 'Starting…';
     state.mode = forceMode || (ui.demo.checked ? 'demo' : 'live');
-    const stereo = aimMode() === 'stereo';
-    state.sensorsSeen = false; state.zeroQuat = null; state.relative = { alpha: 0, beta: 0, gamma: 0 }; state.beam = [0, 0, -1]; state.demoStep = 0;
-    const key = state.mode + (stereo ? ':stereo' : '');
+    const stereo = aimMode() === 'stereo', room = roomMode();
+    // iOS only lets speech start from a tap: say the first prompt now, synchronously.
+    if (room && state.mode === 'live') say('Hold still.');
+    state.sensorsSeen = false; state.zeroHeading = null; state.quatLog.length = 0; state.relative = { alpha: 0, beta: 0, gamma: 0 }; state.beam = [0, 0, -1]; state.demoStep = 0;
+    const key = state.mode + (stereo ? ':stereo' : room ? ':room' : '');
     if (state.points.length && state.cloudKey !== key) clearCloud();
     // Stereo output is a flat map: look down on it with "forward" pointing up the screen.
     const wasStereo = !!(state.cloudKey && state.cloudKey.endsWith(':stereo'));
     if (stereo && (!wasStereo || state.cloudKey !== key)) Object.assign(state.camera, { yaw: 0, pitch: 1.2, dist: 7.5, tz: -1.7 });
     if (!stereo && wasStereo) Object.assign(state.camera, { yaw: -0.6, pitch: 0.29, dist: 8.2, tz: 0 });
     state.cloudKey = key;
-    const sensorPromise = state.mode === 'live' && aimMode() === 'sensors' ? requestSensors() : Promise.resolve();
+    const sensorPromise = state.mode === 'live' && (aimMode() === 'sensors' || room) ? requestSensors() : Promise.resolve();
     let startupError = null, note = '';
     try {
       if (state.mode === 'live') {
@@ -1171,18 +1952,31 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
         state.source = state.ctx.createBufferSource(); state.source.buffer = outputBuffer(state.ctx); state.source.loop = true; state.source.connect(state.gain);
         state.source.start(state.ctx.currentTime + 0.03);
         const resumePromise = state.ctx.resume();
-        state.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false, voiceIsolation: false }, video: false });
+        const audioC = { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false, voiceIsolation: false };
+        ROOM.noCamera = false;
+        if (room) {
+          // One prompt for camera + microphone. If the camera is refused or missing, carry on with sonar only.
+          try { state.stream = await navigator.mediaDevices.getUserMedia({ audio: audioC, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } }); }
+          catch (e) { console.warn('Camera + microphone failed; retrying microphone only', e); state.stream = await navigator.mediaDevices.getUserMedia({ audio: audioC, video: false }); ROOM.noCamera = true; }
+        } else state.stream = await navigator.mediaDevices.getUserMedia({ audio: audioC, video: false });
         await resumePromise;
         if (state.ctx.state !== 'running') { try { await state.ctx.resume(); } catch (_) { } }
         if (state.ctx.state !== 'running') throw Error('Browser suspended audio output. Enable sound for this site (and turn off silent mode on iPhone) and try again.');
         state.usedMic = true;
         await setupCapture(state.ctx, state.stream);
+        if (room) { await roomVideo(state.stream); roomBegin(); }
         state.ctx.onstatechange = () => { if (state.running && state.ctx && state.ctx.state !== 'running') setMessage('Audio was interrupted by the system (' + state.ctx.state + '). Return to the page or tap Start again.', 'warn'); };
         requestWakeLock();
       } else {
         state.sr = 48000; note = buildPipelines(stereo);
         const c = state.pipe.speed, common = { sr: state.sr, f0: state.f0, f1: state.f1, chirpMs: +ui.duration.value, periodMs: +ui.period.value, seed: (Math.random() * 1e9) | 0 };
-        if (stereo) {
+        if (room) {
+          ROOM.noCamera = false;
+          state.synth = new D.SyntheticStream(Object.assign(common, { staticPaths: [{ delay: (2 * 0.45 - state.pipe.cfg.spacing) / c, amp: Math.pow(10, -40 / 20) }] }));
+          ROOM.demo = { n: 0, room: RM.DEMO_ROOM, arm: 0.2, cam: null, pos: [0, 0, 0], rng: (common.seed >>> 0) || 1 };
+          roomBegin();
+          state.timer = setInterval(roomDemoTick, Math.max(16, +ui.period.value / DEMO_SPEED));
+        } else if (stereo) {
           const demo = state.stereo.demo = stereoDemoSetup(state.stereo.b, c);
           state.synth = new D.SyntheticStream(Object.assign(common, {
             variants: [{ f0: state.f0, f1: state.f1 }, { f0: state.f1, f1: state.f0, offset: (demo.dR - demo.dL) / c * state.sr, gain: Math.sqrt(demo.dL / demo.dR) }]
@@ -1198,14 +1992,18 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
         state.captureType = 'synthetic stream';
       }
       state.running = true; lockSignal(true);
-      ui.startBtn.classList.add('running'); ui.startBtn.textContent = '■ Stop scan'; setMobileStart(true);
+      ui.startBtn.classList.add('running'); ui.startBtn.textContent = stopLabel(); setMobileStart(true);
       markStatus(state.mode === 'demo' ? 'SIMULATING' : 'SCANNING', state.mode === 'demo' ? 'demo' : 'live');
-      setText('hudMode', state.mode === 'demo' ? 'SOURCE: SYNTHETIC ECHOES' : stereo ? 'SOURCE: L+R SPEAKERS + MICROPHONE' : 'SOURCE: SPEAKER + MICROPHONE');
+      setText('hudMode', state.mode === 'demo' ? (room ? 'SOURCE: SYNTHETIC ROOM (SONAR + PHOTOS)' : 'SOURCE: SYNTHETIC ECHOES') : stereo ? 'SOURCE: L+R SPEAKERS + MICROPHONE' : room ? (ROOM.noCamera ? 'SOURCE: EARPIECE SONAR (NO CAMERA)' : 'SOURCE: EARPIECE SONAR + SELFIE CAMERA') : 'SOURCE: SPEAKER + MICROPHONE');
       setText('samplerate', (state.sr / 1000).toFixed(1) + ' kHz');
       setText('deviceState', state.mode === 'demo' ? 'SIMULATED' : 'ACQUIRING');
       if (stereo) setText('hudOrientation', 'GEOMETRY: STEREO TRIANGULATION');
       else if (state.mode === 'live' && manualMode()) manualBeam(); else if (state.mode === 'live') setText('hudOrientation', 'ORIENTATION: WAITING');
-      if (state.mode === 'demo' && stereo) setMessage(`SIMULATION: a stationary laptop with two speakers in a synthetic room (5 objects, back and side walls; mic ${Math.abs(DEMO_ROOM.mic * 100)} cm left of centre). Same pipelines as live stereo mode, ${DEMO_SPEED}× speed.`, 'warn');
+      if (state.mode === 'demo' && room) setMessage(`SIMULATION: a synthetic furnished room captured the way you would capture yours — hold still, turn a full circle with the phone ${Math.round(ROOM.demo.arm * 100)} cm in front of you, point at the floor, then the ceiling. Same sonar pipeline, wall fit and photo stitcher as live room capture, ${DEMO_SPEED}× speed. No camera or microphone used.`, 'warn');
+      else if (room && state.mode === 'live') setMessage(ROOM.noCamera
+        ? 'Room capture is running on sonar only (the camera was not available or not allowed), so the dollhouse will be untextured. Hold still, then turn slowly through a full circle; point at the floor, then the ceiling.'
+        : 'Room capture: hold the phone against your chest, screen facing out. Hold still for a moment, then turn slowly on the spot through a full circle. At the chime point at the floor, then at the ceiling. Press Stop at any time to build from what was captured.');
+      else if (state.mode === 'demo' && stereo) setMessage(`SIMULATION: a stationary laptop with two speakers in a synthetic room (5 objects, back and side walls; mic ${Math.abs(DEMO_ROOM.mic * 100)} cm left of centre). Same pipelines as live stereo mode, ${DEMO_SPEED}× speed.`, 'warn');
       else if (state.mode === 'demo') setMessage(`SIMULATION: synthetic room with realistic echo levels (about −32 to −43 dB re direct), phone self-response, reverberation, noise and clock drift, processed by the same streaming pipeline as live mode at ${DEMO_SPEED}× speed. No microphone or speaker used.`, 'warn');
       else if (note) setMessage(note + ' Expect reduced high-frequency performance.', 'warn');
       else if (state.captureType !== 'AudioWorklet') setMessage('Live scanning with ' + state.captureType + ' capture (AudioWorklet unavailable).', 'warn');
@@ -1215,6 +2013,9 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
       if (state.mode === 'live' && aimMode() === 'sensors') {
         setTimeout(() => { if (state.running && !state.sensorsSeen && aimMode() === 'sensors') setMessage('Audio scan active, but no orientation values arrived, so echoes are range-only. On a laptop choose “Laptop stereo speakers”; on a phone allow Motion & Orientation access.', 'warn'); }, 3500);
       }
+      if (state.mode === 'live' && room) {
+        setTimeout(() => { if (state.running && ROOM.capturing && !state.sensorsSeen) setMessage('Room capture needs the phone’s motion sensors, and no orientation values arrived. On iPhone allow Motion & Orientation access (Stop, then Start again and tap Allow). On a computer, try the room-capture demo instead.', 'error'); }, 3500);
+      }
     } catch (e) {
       startupError = e; console.error('Start failed', e); await stopScan();
       const msg = e.name === 'NotAllowedError' ? 'Microphone permission denied. Allow microphone access for this page in site settings and retry.'
@@ -1223,11 +2024,13 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
       setMessage(msg, 'error'); markStatus('ERROR');
     } finally {
       state.busy = false; ui.startBtn.disabled = false;
-      if (!state.running) { ui.startBtn.textContent = '▶ Start scan'; ui.startBtn.classList.remove('running'); setMobileStart(false); }
+      if (!state.running) { ui.startBtn.textContent = startLabel(); ui.startBtn.classList.remove('running'); setMobileStart(false); }
       if (startupError) setText('deviceState', 'ERROR');
     }
   }
   async function stopScan() {
+    const R = ROOM, wasCapturing = R.capturing;
+    if (wasCapturing) { R.capturing = false; R.records = state.pipe ? state.pipe.stopRecording() : []; }
     state.running = false;
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
     if (state.source) { try { state.source.stop(); } catch (_) { } try { state.source.disconnect(); } catch (_) { } state.source = null; }
@@ -1240,9 +2043,362 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     // iOS can stay in play-and-record (earpiece, low fidelity) after the mic closes; nudge it back.
     if (state.usedMic && navigator.audioSession) { try { navigator.audioSession.type = 'playback'; navigator.audioSession.type = 'auto'; } catch (_) { } }
     state.usedMic = false; state.synth = null;
-    lockSignal(false); ui.startBtn.classList.remove('running'); ui.startBtn.textContent = '▶ Start scan'; setMobileStart(false); markStatus('STANDBY');
+    if (R.video) { try { R.video.pause(); } catch (_) { } R.video.srcObject = null; R.videoReady = false; }
+    if (window.speechSynthesis && state.mode === 'live') { try { speechSynthesis.cancel(); } catch (_) { } }
+    lockSignal(false); ui.startBtn.classList.remove('running'); ui.startBtn.textContent = startLabel(); setMobileStart(false); markStatus('STANDBY');
     setText('deviceState', 'STOPPED'); setText('hudMode', 'SOURCE: INACTIVE'); state.sceneDirty = true; updateBaselineUI();
+    if (wasCapturing) {
+      if ((R.records && R.records.length >= 20) || R.frames.length >= 3) buildRoom();
+      else { ui.roomLive.hidden = true; ui.hud.hidden = false; ui.reticle.hidden = false; setMessage('Room capture stopped before enough was recorded to build a room. Start again and turn through a full circle.', 'warn'); }
+    }
   }
+
+  // ---------------------------------------------------------------- room capture (sonar + selfie camera → dollhouse)
+  // While you turn on the spot, every chirp's range profile is recorded with its aim and a low-res selfie
+  // photo is taken every few degrees. Afterwards echoes common to every heading (body, phone, the
+  // average room) are removed, walls show up as heading-dependent plateaus, a box is fitted, and the
+  // photos are stitched onto it (projected from where the phone actually was).
+  const ROOM = state.room = {
+    capturing: false, building: false, shown: false, frames: [], pano: null, records: null, analysis: null, fit: null, room: null,
+    tex: null, panoImg: null, coverage: 0, phase: 'idle', step: '', startT: 0, lastT: 0, shotAt: -1e9, lastShot: null, hist: [],
+    bins: new Uint8Array(36), floorMs: 0, ceilMs: 0, floorShots: 0, ceilShots: 0, video: null, videoReady: false, noCamera: false,
+    grab: null, grabCtx: null, view: null, glDirty: true, spin: true, viewMode: 'dollhouse', demo: null, previewAt: 0, previewDirty: false,
+    rebuildSeq: 0, rebuildTimer: null, diag: '', prompt: '', doneAt: 0, usdzUrl: null, arReady: false
+  };
+  const camFov = () => +ui.camFov.value * DEG;
+  const armRadius = () => +ui.armRadius.value / 100;
+  const simMs = () => state.ring.total / state.sr * 1000; // capture clock: samples heard (live) or synthesised (demo)
+  const angleBetween = (a, b) => Math.acos(clamp(a[0] * b[0] + a[1] * b[1] + a[2] * b[2], -1, 1));
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const nextFrame = () => new Promise(r => setTimeout(r, 16));
+
+  function cue(kind) { // short tones well below the sonar band; skipped when the sonar itself is audible
+    const ctx = state.ctx; if (!ctx || state.mode !== 'live' || ui.band.value === 'audible' || ctx.state !== 'running') return;
+    const seq = kind === 'tick' ? [[1750, 0.014, 0.06]] : kind === 'step' ? [[880, 0.09, 0.14], [1320, 0.14, 0.14]] : [[660, 0.1, 0.14], [880, 0.1, 0.14], [1320, 0.22, 0.14]];
+    let at = ctx.currentTime + 0.01;
+    try {
+      for (const [f, d, g] of seq) {
+        const o = ctx.createOscillator(), gn = ctx.createGain();
+        o.frequency.value = f; gn.gain.setValueAtTime(0.0001, at); gn.gain.exponentialRampToValueAtTime(g, at + 0.005); gn.gain.exponentialRampToValueAtTime(0.0001, at + d);
+        o.connect(gn); gn.connect(ctx.destination); o.start(at); o.stop(at + d + 0.02); at += d + 0.035;
+      }
+    } catch (_) { }
+  }
+  function say(text) {
+    if (!ui.voice.checked || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+    if (state.mode === 'demo' && state.running) return;
+    try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 1.05; speechSynthesis.speak(u); } catch (_) { }
+  }
+  function setPrompt(main, sub = '') {
+    const key = main + '|' + sub; if (ROOM.prompt === key) return; ROOM.prompt = key;
+    ui.roomPrompt.textContent = main;
+    if (sub) { const sm = document.createElement('small'); sm.textContent = sub; ui.roomPrompt.appendChild(sm); }
+  }
+
+  // Camera geometry. Frames arrive upright for the current screen orientation; the selfie camera looks
+  // out of the screen (device +z) and its frames are not mirrored, so image-right = −(screen right).
+  function screenAngle() {
+    const so = screen.orientation && Number.isFinite(screen.orientation.angle) ? screen.orientation.angle : Number.isFinite(window.orientation) ? window.orientation : 0;
+    return ((so % 360) + 360) % 360;
+  }
+  function autoFrameAngle(vw, vh, q) {
+    const a = screenAngle(), landVideo = vw > vh, landUi = a === 90 || a === 270;
+    if (landVideo === landUi) return a;
+    // video and screen disagree (rotation lock, desktop webcam): take the rotation whose "up" points up
+    let best = landVideo ? 90 : 0, bestY = -Infinity;
+    for (const c of landVideo ? [90, 270] : [0, 180]) { const th = c * DEG, y = toSceneQ(q, [Math.sin(th), Math.cos(th), 0])[1]; if (y > bestY) { bestY = y; best = c; } }
+    return best;
+  }
+  function frameCam(f) {
+    if (f.cam) return f.cam; // synthetic frames carry their exact camera
+    const sel = ui.frameRot.value, th = (sel === 'auto' ? f.theta : +sel) * DEG, S = v => toSceneQ(f.q, v, f.heading);
+    const r = S([Math.cos(th), -Math.sin(th), 0]);
+    return { fwd: S([0, 0, 1]), up: S([Math.sin(th), Math.cos(th), 0]), right: ui.camMirror.checked ? r : [-r[0], -r[1], -r[2]] };
+  }
+  async function roomVideo(stream) {
+    const R = ROOM, tracks = stream.getVideoTracks();
+    R.videoReady = false;
+    if (!tracks.length) { R.noCamera = true; return; }
+    if (!R.video) {
+      // iOS decodes camera frames only for a video element in the document: keep a tiny invisible one.
+      R.video = document.createElement('video');
+      R.video.muted = true; R.video.playsInline = true; R.video.autoplay = true;
+      R.video.setAttribute('playsinline', ''); R.video.setAttribute('muted', '');
+      R.video.style.cssText = 'position:absolute;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+      ui.viewport.appendChild(R.video);
+    }
+    R.video.srcObject = new MediaStream(tracks);
+    try { await R.video.play(); } catch (e) { console.warn('Camera preview did not start', e); }
+  }
+  function grabFrame() {
+    const R = ROOM, v = R.video;
+    if (!v || v.readyState < 2 || !v.videoWidth) return null;
+    const vw = v.videoWidth, vh = v.videoHeight, k = ROOM_FRAME_LONG / Math.max(vw, vh), w = Math.max(8, Math.round(vw * k)), h = Math.max(8, Math.round(vh * k));
+    if (!R.grab) { R.grab = document.createElement('canvas'); R.grabCtx = R.grab.getContext('2d', { willReadFrequently: true }); }
+    if (R.grab.width !== w || R.grab.height !== h) { R.grab.width = w; R.grab.height = h; }
+    R.grabCtx.drawImage(v, 0, 0, w, h);
+    const q = quatAt(performance.now() - ROOM_VIDEO_LAG_MS);
+    return { data: R.grabCtx.getImageData(0, 0, w, h).data, w, h, q, theta: autoFrameAngle(vw, vh, q), heading: state.zeroHeading || 0 };
+  }
+  function demoFrame() {
+    const d = ROOM.demo, rnd = () => ((d.rng = (Math.imul(d.rng, 1664525) + 1013904223) >>> 0) / 4294967296);
+    return { data: RM.renderDemoFrame(d.room, d.cam, 144, 192, 74 * DEG, 0.9 + 0.2 * rnd(), d.pos), w: 144, h: 192, cam: d.cam };
+  }
+
+  function roomBegin() {
+    const R = ROOM, t = simMs();
+    Object.assign(R, {
+      capturing: true, frames: [], pano: new RM.Panorama(512, 256), records: null, phase: 'settle', step: '', startT: t, lastT: t, shotAt: -1e9,
+      lastShot: null, hist: [], floorMs: 0, ceilMs: 0, floorShots: 0, ceilShots: 0, prompt: '', doneAt: 0, previewDirty: true
+    });
+    R.bins.fill(0);
+    state.pipe.startRecording(ROOM_MAX_REC);
+    showRoom(false); ui.roomLive.hidden = false; ui.hud.hidden = true; ui.reticle.hidden = true; // the capture overlay replaces the readout
+    const pc = ui.camPreview.getContext('2d'); pc.fillStyle = '#0b1a29'; pc.fillRect(0, 0, ui.camPreview.width, ui.camPreview.height);
+    setPrompt('HOLD STILL', 'locking onto the chirp…');
+  }
+  // Called for every synthetic chirp (demo) or every animation frame (live).
+  function roomTick() {
+    const R = ROOM; if (!R.capturing) return;
+    const demo = state.mode === 'demo', t = simMs(), dt = Math.max(0, t - R.lastT); R.lastT = t;
+    const fwd = demo ? (R.demo.cam && R.demo.cam.fwd) : state.sensorsSeen ? toSceneQ(state.rawQuat, [0, 0, 1]) : null;
+    const fr0 = state.frame, locked = !!fr0 && (fr0.status === 'echo' || fr0.status === 'noecho');
+    if (!demo && R.video && !R.videoReady) R.videoReady = R.video.readyState >= 2 && R.video.videoWidth > 0;
+    if (!fwd) { setPrompt('HOLD STILL', 'waiting for motion sensors…'); return; }
+    R.hist.push({ t, f: fwd }); while (R.hist.length > 2 && t - R.hist[0].t > 300) R.hist.shift();
+    const h0 = R.hist[0], span = (t - h0.t) / 1000, speed = span > 0.08 ? angleBetween(fwd, h0.f) / span : 0;
+    const pitch = Math.asin(clamp(fwd[1], -1, 1)), yaw = Math.atan2(fwd[0], -fwd[2]);
+    if (R.phase === 'settle') {
+      const camOk = demo || R.noCamera || R.videoReady;
+      if (locked && camOk && t - R.startT > 1000) { R.phase = 'capture'; }
+      else { setPrompt('HOLD STILL', !locked ? 'locking onto the chirp…' : 'starting the camera…'); updateMeters(); return; }
+    }
+    // sonar coverage: headings swept while roughly level, time spent aiming down / up
+    if (Math.abs(pitch) < 30 * DEG) R.bins[((Math.floor((yaw + Math.PI) / (10 * DEG)) % 36) + 36) % 36] = 1;
+    else if (pitch < -40 * DEG) R.floorMs += dt; else if (pitch > 40 * DEG) R.ceilMs += dt;
+    // photos: every ROOM_SHOT_DEG of view change, only while turning slowly enough to stay sharp
+    const since = R.lastShot ? angleBetween(fwd, R.lastShot) : Infinity;
+    if (!R.noCamera && R.frames.length < ROOM_MAX_FRAMES && speed < 50 * DEG && (since > ROOM_SHOT_DEG * DEG || (since > 3 * DEG && t - R.shotAt > 2000))) {
+      const f = demo ? demoFrame() : grabFrame();
+      if (f) {
+        R.frames.push(f); R.pano.add({ data: f.data, w: f.w, h: f.h, cam: frameCam(f) }, camFov());
+        R.lastShot = fwd; R.shotAt = t; R.previewDirty = true; cue('tick');
+        if (pitch < -35 * DEG) R.floorShots++; else if (pitch > 35 * DEG) R.ceilShots++;
+        drawCamPreview(f);
+      }
+    }
+    const turn = R.bins.reduce((a, b) => a + b, 0) / 36;
+    const turnOk = turn >= 0.94, floorOk = R.floorMs >= 1500 && (R.noCamera || R.floorShots >= 2), ceilOk = R.ceilMs >= 1500 && (R.noCamera || R.ceilShots >= 2);
+    const step = !turnOk ? 'turn' : !floorOk ? 'floor' : !ceilOk ? 'ceiling' : 'done';
+    if (step !== R.step) {
+      if (R.step) cue(step === 'done' ? 'done' : 'step');
+      say(step === 'turn' ? 'Now turn slowly on the spot.' : step === 'floor' ? 'Point at the floor.' : step === 'ceiling' ? 'Now point at the ceiling.' : 'Done. Building your room.');
+      R.step = step;
+      if (step === 'done') R.doneAt = performance.now();
+    }
+    const slow = speed > 50 * DEG ? 'slower please — photos need a steady phone' : '';
+    if (step === 'turn') setPrompt('TURN SLOWLY ↻', slow || `${Math.round(turn * 100)}% of the circle · ${R.frames.length} photos`);
+    else if (step === 'floor') setPrompt('POINT AT THE FLOOR ↓', slow || 'tilt the screen down and sweep a little');
+    else if (step === 'ceiling') setPrompt('POINT AT THE CEILING ↑', slow || 'tilt the screen up and sweep a little');
+    else setPrompt('DONE ✓', 'building the dollhouse…');
+    updateMeters(turn, turnOk, floorOk, ceilOk);
+    // finish: let the chime play, then stop and build; hard limit on very long captures
+    if ((step === 'done' && performance.now() - R.doneAt > (demo ? 300 : 900)) || t - R.startT > ROOM_MAX_S * 1000) {
+      if (state.running && !state.busy) stopScan();
+    }
+  }
+  function updateMeters(turn = 0, turnOk = false, floorOk = false, ceilOk = false) {
+    const R = ROOM;
+    setText('mTurn', `TURN ${Math.round(turn * 100)}%`); setText('mFloor', floorOk ? 'FLOOR ✓' : 'FLOOR'); setText('mCeil', ceilOk ? 'CEILING ✓' : 'CEILING');
+    setText('mShots', R.noCamera ? 'NO CAMERA' : `${R.frames.length} PHOTOS`);
+    ui.mTurn.classList.toggle('done', turnOk); ui.mFloor.classList.toggle('done', floorOk); ui.mCeil.classList.toggle('done', ceilOk);
+    ui.mTurn.classList.toggle('now', R.step === 'turn'); ui.mFloor.classList.toggle('now', R.step === 'floor'); ui.mCeil.classList.toggle('now', R.step === 'ceiling');
+  }
+  function drawCamPreview(f) {
+    const c = ui.camPreview; if (c.width !== f.w || c.height !== f.h) { c.width = f.w; c.height = f.h; }
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(f.data), f.w, f.h), 0, 0);
+  }
+  let panoBuf = null;
+  function drawPanoPreview() {
+    const R = ROOM; if (!R.pano || !R.previewDirty) return; R.previewDirty = false;
+    const c = ui.panoPreview, pw = c.width, ph = c.height, g2 = c.getContext('2d');
+    if (!panoBuf || panoBuf.length !== pw * ph * 4) panoBuf = new Uint8ClampedArray(pw * ph * 4);
+    R.pano.preview(pw, ph, panoBuf, 45 * DEG, -45 * DEG);
+    g2.putImageData(new ImageData(panoBuf, pw, ph), 0, 0);
+    if (R.lastShot) { const x = (Math.atan2(R.lastShot[0], -R.lastShot[2]) + Math.PI) / (2 * Math.PI) * pw; g2.fillStyle = '#f4bd70'; g2.fillRect(Math.round(x) - 1, 0, 2, ph); }
+  }
+
+  // ---- synthetic room capture (demo): scripted pose, ray-cast photos, room echoes from the phone's position
+  function roomDemoPose(t) {
+    if (t < 1.2) return { yaw: 0, pitch: 0 };
+    t -= 1.2; if (t < 24) return { yaw: t / 24 * 2 * Math.PI, pitch: 6 * DEG * Math.sin(2 * Math.PI * t / 7) };
+    t -= 24; if (t < 3.5) return { yaw: 0.3 + 0.5 * t, pitch: -62 * DEG };
+    t -= 3.5; return { yaw: 1.9 + 0.5 * Math.min(t, 6), pitch: 52 * DEG };
+  }
+  function roomDemoTick() {
+    if (!state.running || state.mode !== 'demo' || !ROOM.capturing) return;
+    const d = ROOM.demo, ps = roomDemoPose(d.n++ * state.pipe.P / state.sr);
+    const fwd = RM.dirFrom(ps.yaw, ps.pitch), up = RM.dirFrom(ps.yaw, ps.pitch + Math.PI / 2);
+    d.cam = { fwd, up, right: cross(fwd, up) }; d.pos = RM.phonePos(d.cam, d.arm);
+    state.beam = fwd; state.relative = { alpha: ps.yaw / DEG, beta: ps.pitch / DEG, gamma: 0 }; state.sceneDirty = true;
+    setText('hudOrientation', 'ORIENTATION: SYNTHETIC ROOM CAPTURE');
+    logAim(state.ring.total);
+    state.ring.push(state.synth.next(RM.roomEchoPaths(d.room, fwd, state.pipe.speed, state.pipe.cfg.spacing, echoAmp, d.pos)));
+    runPipeline();
+    roomTick();
+  }
+
+  // ---- build: sonar fit → box; photos re-stitched with the box as depth → face textures → WebGL
+  async function buildRoom() {
+    const R = ROOM; if (R.building) return; R.building = true;
+    ui.roomLive.hidden = false; setPrompt('BUILDING…', 'fitting walls to the sonar echoes');
+    try {
+      await nextFrame();
+      R.analysis = state.pipe.analyzeRecording(R.records || [], 6);
+      fitFromAnalysis();
+      await rebuildTextures(true);
+      showRoom(true);
+      const f = R.fit, z = RM.roomSize(R.room), n = (R.records || []).length;
+      if (state.mode === 'demo' && state.cloudKey === 'demo:room') {
+        const tz = RM.roomSize(RM.DEMO_ROOM);
+        setMessage(`Synthetic room rebuilt from ${n} sonar chirps and ${R.frames.length} photos: ${fmt(z.width, 2)} × ${fmt(z.length, 2)} m, ceiling ${fmt(z.height, 2)} m (true room ${fmt(tz.width, 2)} × ${fmt(tz.length, 2)} m, ceiling ${fmt(tz.height, 2)} m; rotation ${fmt(f.phi / DEG, 1)}° vs ${fmt(RM.DEMO_ROOM.phi / DEG, 1)}°). Drag to orbit, try “Inside”, or export.`, 'warn');
+      } else {
+        const weak = f.known.filter(Boolean).length < 4 || f.samples.horizontal < 30;
+        setMessage(`Dollhouse built from ${n} sonar chirps and ${R.frames.length} photos: about ${fmt(z.width, 1)} × ${fmt(z.length, 1)} m, ceiling ${fmt(z.height, 1)} m. Drag to orbit, switch to “Inside” for the photo view, or export.` +
+          (R.noCamera ? ' No photos were taken (camera unavailable), so the walls are plain.' : '') +
+          (weak ? ' The sonar heard few clear wall echoes, so some walls are estimates — fix them under “Adjust room”.' : ''), weak ? 'warn' : 'info');
+      }
+    } catch (e) { console.error('Room build failed', e); setMessage('Building the room failed: ' + (e.message || e), 'error'); }
+    finally { R.building = false; ui.roomLive.hidden = true; ui.hud.hidden = false; ui.reticle.hidden = R.shown; }
+  }
+  function fitFromAnalysis() {
+    const R = ROOM, an = R.analysis || { dynamic: [], staticPeaks: [] };
+    R.fit = RM.fitRoom(an.dynamic, an.staticPeaks, { arm: armRadius() });
+    R.room = { phi: R.fit.phi, d: R.fit.d.slice(), floor: R.fit.floor, ceiling: R.fit.ceiling };
+    syncRoomSliders();
+  }
+  function plainTextures(room) { // no photos: light faces with a 0.5 m grid so the geometry still reads
+    return RM.faceGeometry(room).map(f => {
+      const w = 128, h = 128, data = new Uint8ClampedArray(w * h * 4);
+      const base = f.name === 'floor' ? [128, 112, 96] : f.name === 'ceiling' ? [228, 232, 236] : [190, 204, 216];
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+        const s = (i + 0.5) / w * f.width, t = (j + 0.5) / h * f.height, line = Math.min(Math.abs(s * 2 - Math.round(s * 2)), Math.abs(t * 2 - Math.round(t * 2))) < 0.02, o = (j * w + i) * 4, k = line ? 0.82 : 1;
+        data[o] = base[0] * k; data[o + 1] = base[1] * k; data[o + 2] = base[2] * k; data[o + 3] = 255;
+      }
+      return { name: f.name, w, h, data, coverage: 0 };
+    });
+  }
+  async function rebuildTextures(withProgress = false) {
+    const R = ROOM, seq = ++R.rebuildSeq, room = R.room, fov = camFov(), arm = armRadius();
+    if (!room) return;
+    let tex, img = null, cov = 0;
+    if (R.frames.length) {
+      const pano = new RM.Panorama(1024, 512);
+      for (let i = 0; i < R.frames.length; i++) {
+        const f = R.frames[i], cam = frameCam(f);
+        pano.add({ data: f.data, w: f.w, h: f.h, cam }, fov, { pos: RM.phonePos(cam, arm), room });
+        if (i % 6 === 5) {
+          if (withProgress) setPrompt('BUILDING…', `stitching photos ${i + 1}/${R.frames.length}`);
+          await nextFrame(); if (seq !== R.rebuildSeq) return; // superseded by a newer request
+        }
+      }
+      if (withProgress) setPrompt('BUILDING…', 'texturing walls, floor and ceiling'); await nextFrame(); if (seq !== R.rebuildSeq) return;
+      img = pano.toImage(); cov = pano.coverage(); tex = RM.faceTextures(room, img);
+    } else tex = plainTextures(room);
+    R.panoImg = img; R.coverage = cov; R.tex = tex;
+    if (!ensureView()) return;
+    R.view.setRoom(room, tex); R.view.setPoints(roomPoints()); R.glDirty = true;
+    invalidateAR(); updateRoomSummary();
+  }
+  function scheduleRebuild(delay = 250) {
+    if (!ROOM.room) return;
+    clearTimeout(ROOM.rebuildTimer); ROOM.rebuildTimer = setTimeout(() => rebuildTextures(false), delay);
+  }
+  function roomPoints() { const out = []; for (const p of state.points) out.push(p.x, p.y, p.z); return out; }
+  function ensureView() {
+    if (ROOM.view) return true;
+    try { ROOM.view = new RM.DollhouseView(ui.roomGl); return true; }
+    catch (e) { console.error(e); setMessage('This browser could not start WebGL, so the dollhouse cannot be shown. The exports still work.', 'error'); return false; }
+  }
+  function showRoom(on) {
+    const R = ROOM; on = !!on && !!R.room && !!R.view;
+    if (R.shown === on) { ui.roomTools.hidden = !on; return; }
+    R.shown = on;
+    ui.roomGl.hidden = !on; ui.scene.hidden = on; ui.roomTools.hidden = !on; ui.reticle.hidden = on;
+    setText('viewTitle', on ? '/ room dollhouse' : '/ point cloud');
+    if (on) { R.glDirty = true; R.spin = true; setView(R.viewMode || 'dollhouse'); resize(); }
+    else { state.sceneDirty = true; setText('hudSamples', `POINTS: ${state.points.length} / ${MAX_POINTS}`); }
+  }
+  function setView(mode) {
+    const R = ROOM, v = R.view; if (!v || !R.room) return;
+    R.viewMode = mode; const z = RM.roomSize(R.room), L = Math.max(z.width, z.length, 2);
+    for (const b of ui.viewSeg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === mode);
+    if (mode === 'inside') Object.assign(v.cam, { mode: 'inside', yaw: 0, pitch: 0, fov: 80 * DEG });
+    else if (mode === 'top') Object.assign(v.cam, { mode: 'dollhouse', yaw: -R.room.phi, pitch: 1.5, dist: 2.3 * L + 1 });
+    else Object.assign(v.cam, { mode: 'dollhouse', yaw: -R.room.phi - 0.6, pitch: 0.72, dist: 1.9 * L + 1 });
+    v.cam.target = v.center(); v.cam.showPoints = ui.showPts.checked;
+    R.spin = mode === 'dollhouse'; R.glDirty = true;
+    setText('corner', mode === 'inside' ? 'DRAG TO LOOK AROUND · PINCH/SCROLL TO ZOOM' : 'DRAG TO ORBIT · PINCH/SCROLL TO ZOOM');
+  }
+  const WALLS = [['wallF', 0], ['wallR', 1], ['wallB', 2], ['wallL', 3]];
+  function syncRoomSliders() {
+    const r = ROOM.room; if (!r) return;
+    for (const [id, k] of WALLS) ui[id].value = r.d[k].toFixed(2);
+    ui.floorH.value = r.floor.toFixed(2); ui.ceilH.value = r.ceiling.toFixed(2); ui.roomRot.value = (r.phi / DEG).toFixed(1);
+    roomSliderLabels();
+  }
+  function roomSliderLabels() {
+    for (const [id] of WALLS) setText(id + 'Val', (+ui[id].value).toFixed(2) + ' m');
+    setText('floorHVal', (+ui.floorH.value).toFixed(2) + ' m'); setText('ceilHVal', (+ui.ceilH.value).toFixed(2) + ' m'); setText('roomRotVal', (+ui.roomRot.value).toFixed(1) + '°');
+  }
+  function applySliders() { // live geometry while dragging; textures follow on release
+    const R = ROOM; if (!R.room) return;
+    for (const [id, k] of WALLS) R.room.d[k] = +ui[id].value;
+    R.room.floor = +ui.floorH.value; R.room.ceiling = +ui.ceilH.value; R.room.phi = +ui.roomRot.value * DEG;
+    roomSliderLabels();
+    if (R.view && R.tex) { R.view.setGeometry(R.room); R.view.cam.target = R.view.center(); R.glDirty = true; }
+    updateRoomSummary();
+  }
+  function updateRoomSummary() {
+    const R = ROOM, r = R.room, f = R.fit; if (!r) return;
+    const z = RM.roomSize(r), walls = ['front', 'right', 'back', 'left'], assumed = f ? walls.filter((_, k) => !f.known[k]) : [];
+    ui.roomSummary.innerHTML = `<b>${fmt(z.width, 2)} × ${fmt(z.length, 2)} m</b> · ceiling <b>${fmt(z.height, 2)} m</b> · floor area ${fmt(z.area, 1)} m² · ` +
+      (R.frames.length ? `${R.frames.length} photos (${Math.round(R.coverage * 100)}% of the view sphere)` : 'no photos') + (assumed.length ? ` · ${assumed.join(' & ')} wall estimated` : '');
+    setText('fitNote', f ? `· sonar fit ±${fmt(f.residual * 100, 0)} cm` : '');
+    R.diag = f ? `Room fit from ${f.samples.horizontal} wall echoes (front/right/back/left ${f.counts.join('/')}), typical misfit ${fmt(f.residual * 100, 1)} cm, rotation ${fmt(f.phi / DEG, 1)}°; floor ${f.floorSource === 'aimed' ? 'measured while pointing down' : f.floorSource === 'static' ? 'from the turn-average echo' : 'assumed'}, ceiling ${f.ceilingSource === 'aimed' ? 'measured while pointing up' : f.ceilingSource === 'static' ? 'from the turn-average echo' : 'assumed'}. Distances are from where you stood, corrected for the ${ui.armRadius.value} cm the phone sat in front of your body axis. Walls are assumed square to each other; “Adjust room” edits the box and re-stitches the photos.` : '';
+  }
+  // ---- exports
+  function rgbaToPng(t) {
+    const c = document.createElement('canvas'); c.width = t.w; c.height = t.h;
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(t.data), t.w, t.h), 0, 0);
+    return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(Error('PNG encoding failed')), 'image/png'));
+  }
+  const facePngs = () => Promise.all(ROOM.tex.map(t => rgbaToPng(t).then(b => b.arrayBuffer())));
+  async function exportGLB() {
+    if (!ROOM.room) return;
+    try { download(new Blob([RM.buildGLB(ROOM.room, await facePngs())], { type: 'model/gltf-binary' }), `echoscope-room-${stamp()}.glb`); }
+    catch (e) { setMessage('GLB export failed: ' + e.message, 'error'); }
+  }
+  async function usdzBlob() { return new Blob([RM.buildUSDZ(ROOM.room, await facePngs(), { scale: 0.1 })], { type: 'model/vnd.usdz+zip' }); }
+  async function exportUSDZ() {
+    if (!ROOM.room) return;
+    try { download(await usdzBlob(), `echoscope-room-${stamp()}.usdz`); }
+    catch (e) { setMessage('USDZ export failed: ' + e.message, 'error'); }
+  }
+  async function exportPano() {
+    if (!ROOM.panoImg) { setMessage('No photos to export: the panorama needs the camera.', 'warn'); return; }
+    try { download(await rgbaToPng(RM.fillPanorama(ROOM.panoImg)), `echoscope-room-360-${stamp()}.png`); }
+    catch (e) { setMessage('Panorama export failed: ' + e.message, 'error'); }
+  }
+  // AR Quick Look (iPhone/iPad): an <a rel="ar"> whose only child is an image opens the USDZ in AR.
+  const AR_OK = (() => { try { return document.createElement('a').relList.supports('ar'); } catch (_) { return false; } })();
+  function invalidateAR() {
+    if (ROOM.usdzUrl) { URL.revokeObjectURL(ROOM.usdzUrl); ROOM.usdzUrl = null; }
+    ui.arLink.removeAttribute('href'); ui.arLink.hidden = !AR_OK;
+    if (AR_OK && ROOM.room) usdzBlob().then(b => { ROOM.usdzUrl = URL.createObjectURL(b); ui.arLink.href = ROOM.usdzUrl; }).catch(e => console.warn('USDZ build failed', e));
+  }
+  ui.arImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="118" height="34"><rect width="118" height="34" rx="9" fill="#3ce5c5"/><path d="M14 11l7-4 7 4v9l-7 4-7-4z M14 11l7 4 7-4 M21 15v9" fill="none" stroke="#062533" stroke-width="1.8" stroke-linejoin="round"/><text x="36" y="22" font-family="-apple-system,system-ui,sans-serif" font-size="13" font-weight="700" fill="#062533">View in AR</text></svg>');
+  ui.arLink.hidden = true;
 
   // ---------------------------------------------------------------- rendering (dirty-flag, batched)
   const g = ui.scene.getContext('2d', { alpha: false }), pg = ui.profile.getContext('2d', { alpha: false });
@@ -1263,6 +2419,7 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     bgGrad.addColorStop(0, '#14324d91'); bgGrad.addColorStop(1, '#09172700');
     const pr = ui.profile.getBoundingClientRect(); PW = Math.max(1, pr.width); PH = Math.max(1, pr.height);
     ui.profile.width = Math.round(PW * DPR); ui.profile.height = Math.round(PH * DPR); pg.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (ROOM.shown) { ui.roomGl.width = Math.round(W * DPR); ui.roomGl.height = Math.round(H * DPR); ROOM.glDirty = true; }
     state.sceneDirty = true; state.profDirty = true;
   }
   let cam = null;
@@ -1406,6 +2563,15 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   // ---------------------------------------------------------------- telemetry text (≤10 Hz, change-only)
   function updateTexts() {
     const f = state.frame, running = state.running, st = state.stereo;
+    if (ROOM.shown && ROOM.room) {
+      const z = RM.roomSize(ROOM.room), c = ROOM.view && ROOM.view.cam;
+      setText('hudMode', `ROOM: ${fmt(z.width, 2)} × ${fmt(z.length, 2)} m · CEILING ${fmt(z.height, 2)} m`);
+      setText('hudSamples', `PHOTOS: ${ROOM.frames.length} · SONAR: ${(ROOM.records || []).length} CHIRPS`);
+      setText('hudOrientation', `VIEW: ${ROOM.viewMode === 'inside' ? 'INSIDE (PHOTO SPHERE)' : ROOM.viewMode === 'top' ? 'FLOOR PLAN' : 'DOLLHOUSE'}`);
+      setText('hudEcho', ROOM.fit ? `FIT: ${ROOM.fit.known.filter(Boolean).length}/4 WALLS HEARD · ±${fmt(ROOM.fit.residual * 100, 0)} CM` : 'FIT: —');
+      setText('hudPerf', c && c.mode !== 'inside' ? `ORBIT ${fmt(((c.yaw / DEG) % 360 + 360) % 360, 0)}° · TILT ${fmt(c.pitch / DEG, 0)}°` : 'DRAG TO LOOK AROUND');
+      if (!running) { setText('diagnostic', ROOM.diag || ''); return; }
+    }
     setText('hudPerf', `DSP ${fmt(state.perf.dsp, 2)} ms/chirp · DRAW ${fmt(state.perf.draw, 2)} ms`);
     {
       const ok = x => x && (x.status === 'echo' || x.status === 'noecho');
@@ -1466,9 +2632,15 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     setText('diagnostic', diag);
   }
 
+  let lastTs = 0;
   function loop(ts) {
     requestAnimationFrame(loop);
-    if (state.sceneDirty) { state.sceneDirty = false; drawScene(); }
+    const dt = Math.min(0.1, Math.max(0, (ts - lastTs) / 1000)); lastTs = ts;
+    if (ROOM.capturing && ts - ROOM.previewAt > 300) { ROOM.previewAt = ts; drawPanoPreview(); }
+    if (ROOM.shown && ROOM.view) {
+      if (ROOM.spin && ROOM.view.cam.mode !== 'inside') { ROOM.view.cam.yaw += dt * 0.2; ROOM.glDirty = true; }
+      if (ROOM.glDirty) { ROOM.glDirty = false; ROOM.view.render(); }
+    } else if (state.sceneDirty) { state.sceneDirty = false; drawScene(); }
     if (state.profDirty) { state.profDirty = false; drawProfile(); }
     if (ts - state.lastUi > 100) { state.lastUi = ts; updateTexts(); }
   }
@@ -1478,6 +2650,7 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   function pointerMove(e) {
     if (!state.pointers.has(e.pointerId)) return;
     const old = state.pointers.get(e.pointerId), now = { x: e.clientX, y: e.clientY }; state.pointers.set(e.pointerId, now);
+    if (ROOM.shown && ROOM.view) { roomGesture(old, now); return; }
     if (state.pointers.size === 1) {
       state.camera.yaw += (now.x - old.x) * 0.007; state.camera.pitch = clamp(state.camera.pitch + (now.y - old.y) * 0.007, -1.35, 1.35); state.gesture = null;
     } else if (state.pointers.size === 2) {
@@ -1488,17 +2661,55 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
     state.sceneDirty = true;
   }
   function pointerUp(e) { state.pointers.delete(e.pointerId); state.gesture = null; }
+  function roomGesture(old, now) {
+    const c = ROOM.view.cam; ROOM.spin = false; ROOM.glDirty = true;
+    if (state.pointers.size === 1) {
+      const dx = now.x - old.x, dy = now.y - old.y; state.gesture = null;
+      if (c.mode === 'inside') { const k = 0.0045 * (c.fov || 80 * DEG) / (80 * DEG); c.yaw -= dx * k; c.pitch = clamp(c.pitch - dy * k, -1.45, 1.45); }
+      else { c.yaw -= dx * 0.007; c.pitch = clamp(c.pitch + dy * 0.007, 0.05, 1.54); }
+    } else if (state.pointers.size === 2) {
+      const a = [...state.pointers.values()], dist = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
+      if (state.gesture && dist > 1) zoomRoom(state.gesture / dist);
+      state.gesture = dist;
+    }
+  }
+  function zoomRoom(f) {
+    const c = ROOM.view.cam; ROOM.spin = false; ROOM.glDirty = true;
+    if (c.mode === 'inside') c.fov = clamp((c.fov || 80 * DEG) * f, 35 * DEG, 110 * DEG); else c.dist = clamp(c.dist * f, 2, 60);
+  }
   ui.viewport.addEventListener('pointerdown', pointerDown); ui.viewport.addEventListener('pointermove', pointerMove);
   ui.viewport.addEventListener('pointerup', pointerUp); ui.viewport.addEventListener('pointercancel', pointerUp);
-  ui.viewport.addEventListener('wheel', e => { e.preventDefault(); state.camera.dist = clamp(state.camera.dist + e.deltaY * 0.007, 2.5, 18); state.sceneDirty = true; }, { passive: false });
-  ui.startBtn.addEventListener('click', () => { if (state.running) { stopScan(); setMessage('Scan stopped. The point cloud stays available to inspect and export.'); } else startScan(); });
+  ui.viewport.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (ROOM.shown && ROOM.view) { zoomRoom(Math.exp(e.deltaY * 0.0012)); return; }
+    state.camera.dist = clamp(state.camera.dist + e.deltaY * 0.007, 2.5, 18); state.sceneDirty = true;
+  }, { passive: false });
+  ui.startBtn.addEventListener('click', () => {
+    if (state.running) { const room = ROOM.capturing; stopScan(); if (!room) setMessage('Scan stopped. The point cloud stays available to inspect and export.'); }
+    else startScan();
+  });
   // The demo button is self-contained: it does not flip the Simulation toggle, so "Start scan" stays live.
   ui.quickDemo.addEventListener('click', async () => { if (state.busy) return; if (state.running) await stopScan(); await startScan('demo'); });
   ui.aimMode.addEventListener('change', () => {
     updateAimMode();
     if (!state.running && aimMode() === 'manual') setMessage('Manual aiming: every echo is drawn along the yaw/pitch you set. A laptop that is not moving cannot sense direction, so you will see points on one line. Use it while physically turning the device, or pick “Laptop stereo speakers” for a 2D map.');
     if (!state.running && aimMode() === 'stereo') setMessage('Laptop stereo speakers: set the distance between your two speaker grilles, put the laptop on a desk facing the room, and press Start scan. It learns the mic position by itself.');
+    if (!state.running && aimMode() === 'room') setMessage(ROOM.room ? 'Showing the last captured room. Start a new capture or run the demo.' : 'Room capture: run the demo to see the idea on a synthetic room, or press Start room capture on a phone (allow camera, microphone and motion).');
   });
+  // room capture controls
+  for (const el of [ui.camFov, ui.frameRot, ui.camMirror]) el.addEventListener('change', () => { updateControls(); if (ROOM.room && !ROOM.capturing) scheduleRebuild(50); });
+  ui.camFov.addEventListener('input', updateControls);
+  ui.armRadius.addEventListener('input', updateControls);
+  ui.armRadius.addEventListener('change', () => { if (ROOM.analysis && !ROOM.capturing) { fitFromAnalysis(); scheduleRebuild(50); } });
+  for (const id of ['wallF', 'wallR', 'wallB', 'wallL', 'floorH', 'ceilH', 'roomRot']) {
+    ui[id].addEventListener('input', applySliders);
+    ui[id].addEventListener('change', () => scheduleRebuild(150));
+  }
+  ui.refitBtn.addEventListener('click', () => { if (!ROOM.analysis) return; fitFromAnalysis(); scheduleRebuild(30); setMessage('Room re-fitted from the recorded sonar echoes.'); });
+  ui.viewSeg.addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
+  ui.showPts.addEventListener('change', () => { if (ROOM.view) { ROOM.view.cam.showPoints = ui.showPts.checked; ROOM.view.setPoints(roomPoints()); ROOM.glDirty = true; } });
+  ui.glbBtn.addEventListener('click', exportGLB); ui.usdzBtn.addEventListener('click', exportUSDZ); ui.panoBtn.addEventListener('click', exportPano);
+  ui.roomGl.addEventListener('dblclick', () => setView(ROOM.viewMode === 'inside' ? 'dollhouse' : 'inside'));
   ui.aimYaw.addEventListener('input', updateAimMode); ui.aimPitch.addEventListener('input', updateAimMode);
   ui.elev.addEventListener('input', updateControls); ui.spkSpacing.addEventListener('input', updateControls);
   ui.axis.addEventListener('change', () => { if (state.sensorsSeen && state.mode !== 'demo') sensorBeam(); state.sceneDirty = true; });
@@ -1529,17 +2740,17 @@ body{background:radial-gradient(circle at 65% -30%,#173651 0,transparent 58%),va
   ui.mStart.addEventListener('click', () => ui.startBtn.click());
   ui.mClear.addEventListener('click', () => ui.clearBtn.click());
   ui.mZero.addEventListener('click', () => ui.zeroBtn.click());
-  // A laptop/desktop has no motion sensors worth using: default to stereo there, sensors on touch devices.
-  if (!matchMedia('(pointer: coarse)').matches) ui.aimMode.value = 'stereo';
+  // A laptop/desktop has no motion sensors worth using: default to stereo there; phones start in room capture.
+  if (!matchMedia('(pointer: coarse)').matches) ui.aimMode.value = 'stereo'; else ui.aimMode.value = 'room';
   // iPhone: while the mic is open Safari plays through the earpiece (top, screen side), ~14 cm from the
   // bottom mic. Default the beam axis and direct-path spacing to match; both stay adjustable.
   if (IOS) {
     ui.axis.value = 'screen'; ui.spacing.value = '14';
-    setMessage('iPhone: Safari plays sound through the earpiece while the mic is on, so aim with the screen side (set below). Allow Motion & Orientation when asked, hold still for a second to lock, then sweep slowly. To check which speaker is used, pick the 1–4 kHz band and listen; if the chirp comes from the bottom, set Beam axis to Bottom edge. If the chirp never locks, try 15–20 kHz.');
+    setMessage('iPhone: room capture is selected. Try “Run room-capture demo” first, then “Start room capture” and allow Camera & Microphone and Motion & Orientation. Safari plays sound through the earpiece while the mic is on, which is why the screen side faces the room. If the chirp never locks, try the 15–20 kHz band.');
   }
   resize(); updateControls(); updateAimMode(); setCounts(); lockSignal(false); updateBaselineUI(); requestAnimationFrame(loop);
   // Test hook (read-only snapshot) for automated checks.
-  window.__echoscope = { state, settings, addPoint, drawScene };
+  window.__echoscope = { state, settings, addPoint, drawScene, room: ROOM, setView };
 })();
 </script>
 </body>
