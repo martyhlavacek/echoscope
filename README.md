@@ -18,11 +18,13 @@ Afterwards:
 - **Dollhouse / Floor plan / Inside** views. Inside is the stitched photo sphere seen from where you stood.
 - **Adjust room**: wall distances, floor and ceiling height and rotation. The photos are re-stitched onto the edited box.
 - **Export**: `.glb` (any 3D viewer or Blender), `.usdz` (1:10 table-top scale; **View in AR** opens it in AR Quick Look on iPhone/iPad), and a 360° equirectangular `.png`.
+- **Save raw capture**: a `.zip` with the photos, their orientations and the sonar data. **Open a saved raw capture…** rebuilds it later, including with newer versions, and it's the most useful thing to share when a room comes out wrong.
 
 How it works:
 - Every chirp's range profile is recorded with its aim.
 - Echoes that are the same at every heading (your body, the phone itself) are removed using a heading-balanced turn average. The remaining heading-dependent echoes are mostly walls.
 - A wide sonar beam hears a flat wall at its perpendicular distance, so each wall appears as a plateau of constant range. A rectangular room is fitted to these plateaus. The fit accounts for the phone travelling on a circle in front of your body axis (the "phone distance from your body axis" setting).
+- In a furnished room the sonar can get the room's **rotation** badly wrong (30° in the first real capture). So the room is also lined up with the photos (v2.1): nearly every horizontal edge in a box-shaped room runs along one of two perpendicular directions. Voting with the edges of the stitched panorama gives the rotation without needing any distances. The sonar then re-measures the walls along those directions, and the ceiling and floor lines in the photos refine them when that clearly helps. Untick **align to photos** to see the sonar-only box.
 - Floor and ceiling heights come from the chirps recorded while pointing down and up.
 - The low-resolution photos are placed by the motion sensors, projected from where the phone actually was onto the fitted box (parallax-corrected), blended with exposure matching, and the gaps are inpainted.
 
