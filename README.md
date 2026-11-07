@@ -41,6 +41,17 @@ Tip: on iPhone, **Share → Add to Home Screen** runs EchoScope full screen with
   - A 360° panorama per spot.
 - **Save raw capture**: a `.zip` with the photos, their orientations and the AI depth maps. **Open a saved raw capture…** rebuilds it later, including with newer versions, without running the AI again. It's the most useful thing to share when a room comes out wrong. If a build fails, the error comes with **Save raw capture** and **Try the build again** buttons. Raw captures from v2.x open too and are rebuilt from their photos.
 
+## When something goes wrong
+- **Diagnostics log** (in the settings): the app records every capture and build step as it happens, with timings. The log also includes the depth engine's attempts (GPU or CPU, download, start-up), warnings and errors, and the device's details (no photos). **Copy log** puts it on the clipboard to paste into a message; **Download log** / **Share log** save it as a text file.
+- **The log survives a crash.** It is written to the browser's storage as it goes, so it's still there if iOS kills the tab, which happens when the page runs out of memory.
+- **The capture is saved before every build.** It is saved again once the depth maps exist, so a crash loses nothing. After a crashed build the page shows what it was doing when it stopped, with:
+  - **Rebuild the saved capture**;
+  - **Copy log**;
+  - **Download log**;
+  - **Download capture**.
+- **Lighter settings for the next build.** If the last build crashed, the next one uses settings that need less memory. If it crashed while the GPU was computing depth, the next build uses the CPU instead.
+- **Cancel build.** During a build, **Copy log** and **Cancel build** stay on screen. A step that takes unusually long is noted in the log.
+
 ## How it works
 - **Depth per photo.** [Depth Anything V2 Small](https://huggingface.co/onnx-community/depth-anything-v2-small) (Apache-2.0) runs in the page through [onnxruntime-web](https://onnxruntime.ai) on WebGPU (half precision), or WebAssembly (8-bit) when the GPU can't run it. For each photo it gives relative depth: which things are nearer and farther, but not by how much in metres. That unknown scale and offset is different for every photo.
 - **Calibration against the floor.**

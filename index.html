@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoScope">
 <link rel="icon" href="data:,">
-<title>EchoScope | AI room capture · v3.1</title>
+<title>EchoScope | AI room capture · v3.2</title>
 <style>
 :root{--bg:#06111d;--card:#0b1a2a;--card2:#0e2133;--line:#1d3a4f;--text:#e7f4fb;--muted:#8fb0c4;--accent:#3ce5c5;--accent2:#24c6db;--warn:#f4bd70;--err:#f08991;--bar-pad:12px}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
@@ -72,6 +72,11 @@ select{width:100%;min-height:44px;border-radius:10px;border:1px solid #2c5568;ba
 .toggle:checked{background:#1f8f86}.toggle:checked::after{transform:translateX(20px);background:#fff}
 .steps{margin:0;padding-left:20px;color:#cfe3ee;font-size:14px}.steps li{margin:6px 0}.steps b{color:#fff}
 .about p{margin:8px 0 0;color:#b8cfe0;font-size:13.5px}
+.banner{margin:0 0 14px;padding:14px;border-radius:16px;border:1px solid #8a5a2a;background:linear-gradient(180deg,#2a1d10,#1d150c);color:#ffe3bd}
+.banner b{display:block;font-size:15px;margin-bottom:4px}.banner p{margin:0 0 10px;font-size:13.5px;line-height:1.5;color:#f3d6b0}
+.logpre{margin:0;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;color:#bcd6e4;background:#06121d;border:1px solid #1d3a4f;border-radius:10px;padding:10px;-webkit-user-select:text;user-select:text}
+.build-actions{display:none;gap:10px}.build-actions .btn{flex:1;min-height:48px;background:#0b2233e6;border-color:#ffffff40;color:#e6f6ff}
+.capture.building .build-actions{display:flex}
 .footer{margin:16px 6px 0;font-size:12px;color:#7793aa;line-height:1.5}.footer a{color:#9fd8e6}
 /* ---- full-screen capture ---- */
 .capture{position:fixed;left:0;top:0;width:100%;height:100vh;height:100dvh;z-index:50;background:#000;display:flex;flex-direction:column;touch-action:none;overscroll-behavior:none;color:#fff}
@@ -97,14 +102,16 @@ select{width:100%;min-height:44px;border-radius:10px;border:1px solid #2c5568;ba
 .cap-actions .btn.dim{opacity:.55}
 .cap-actions .btn.ready{box-shadow:0 0 0 3px #f4bd70aa}
 .progress{height:8px;border-radius:999px;background:#ffffff1f;overflow:hidden}.progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .25s}
-.capture.building .cap-bottom .chips,.capture.building #panoPreview,.capture.building .cap-actions,.capture.building #cancelBtn,.capture.building #camPreview{display:none}
+.capture.building .pill,.capture.building .cap-bottom .chips,.capture.building #panoPreview,.capture.building .cap-actions,.capture.building #cancelBtn,.capture.building #camPreview{display:none}
 .capture:not(.building) .progress{display:none}
 html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavior:none}
 </style>
 </head>
 <body>
 <div class="app">
- <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.1</span></header>
+ <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.2</span></header>
+ <div class="banner" id="crashBanner" hidden><b id="crashTitle">The last room build didn’t finish</b><p id="crashText"></p>
+  <div class="tools"><button class="btn primary" id="crashRebuildBtn" type="button">Rebuild the saved capture</button><button class="btn" id="crashCopyBtn" type="button">Copy log</button><button class="btn" id="crashLogBtn" type="button">Download log</button><button class="btn" id="crashCapBtn" type="button">Download capture</button><button class="btn ghost" id="crashCloseBtn" type="button">Dismiss</button></div></div>
  <main class="layout">
   <section class="card" id="stage">
    <div class="viewer" id="viewer">
@@ -133,7 +140,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
      <button class="btn primary big" id="newBtn" type="button">▶ Capture another room</button>
      <details class="box"><summary>Details</summary><div class="inner"><div class="note" id="diag"></div></div></details>
     </div>
-    <div class="row" id="failActions" hidden style="margin-top:10px"><button class="btn" id="failSaveBtn" type="button">Save raw capture</button><button class="btn" id="failRebuildBtn" type="button">Try the build again</button></div>
+    <div class="row" id="failActions" hidden style="margin-top:10px"><button class="btn" id="failSaveBtn" type="button">Save raw capture</button><button class="btn" id="failRebuildBtn" type="button">Try the build again</button><button class="btn" id="failLogBtn" type="button">Copy log</button></div>
     <div class="message" id="message"></div>
    </div>
   </section>
@@ -153,9 +160,15 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     <div class="note" id="modelNote">Depth Anything V2 (small) is downloaded once on first use and kept by this browser. Photos never leave the phone.</div>
    </div></details>
    <details class="box"><summary>Capture files</summary><div class="inner">
+    <div class="stack" id="savedRow" hidden><div class="note" id="savedText"></div><div class="tools"><button class="btn" id="savedRebuildBtn" type="button">Rebuild saved capture</button><button class="btn" id="savedDownloadBtn" type="button">Download saved capture</button></div></div>
     <div class="tools"><button class="btn" id="rebuildLastBtn" type="button" disabled>Rebuild the last capture</button><button class="btn" id="saveLastBtn" type="button" disabled>Save the last raw capture</button></div>
     <button class="btn" id="loadCapBtn" type="button">Open a saved raw capture…</button><input type="file" id="loadCapFile" accept=".zip,application/zip" hidden>
-    <div class="note">A raw capture holds the photos, their orientations and the AI depth maps, so a room can be rebuilt later or shared for tuning. Captures from v2.x open too.</div>
+    <div class="note">A raw capture holds the photos, their orientations and the AI depth maps, so a room can be rebuilt later or shared for tuning. The last capture is also kept in this browser automatically before each build. Captures from v2.x open too.</div>
+   </div></details>
+   <details class="box" id="logBox"><summary>Diagnostics log</summary><div class="inner">
+    <div class="note">Every capture and build step, its timing, the depth engine’s attempts, warnings and errors, and this device’s details — no photos. It’s written as it happens, so it survives a crash. If something goes wrong, copy it and paste it into a message.</div>
+    <div class="tools"><button class="btn" id="logCopyBtn" type="button">Copy log</button><button class="btn" id="logDownloadBtn" type="button">Download log</button><button class="btn" id="logShareBtn" type="button">Share log</button><button class="btn ghost" id="logClearBtn" type="button">Clear log</button></div>
+    <pre class="logpre" id="logPreview"></pre>
    </div></details>
   </aside>
   <section class="card pad about"><details class="box"><summary>How it works and its limits</summary><div class="inner">
@@ -179,6 +192,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   <div class="progress" id="buildBar"><i id="buildFill"></i></div>
   <div class="cap-hint" id="capHint"></div>
   <div class="cap-actions" id="capActions"><button class="btn" id="nextSpotBtn" type="button">Next spot ▸</button><button class="btn primary" id="buildBtn" type="button">Build room ✓</button></div>
+  <div class="build-actions"><button class="btn" id="buildLogBtn" type="button">Copy log</button><button class="btn" id="buildCancelBtn" type="button">Cancel build</button></div>
  </div>
 </div>
 <script>
@@ -1565,7 +1579,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     try {
       if (typeof navigator === 'undefined' || !navigator.gpu) return null;
       const a = await navigator.gpu.requestAdapter(); if (!a) return null;
-      return { f16: a.features.has('shader-f16') };
+      const i = a.info || {};
+      return { f16: a.features.has('shader-f16'), vendor: i.vendor || '', architecture: i.architecture || '', maxBufferMB: Math.round((a.limits.maxBufferSize || 0) / 1048576), maxStorageMB: Math.round((a.limits.maxStorageBufferBindingSize || 0) / 1048576) };
     } catch (_) { return null; }
   }
 
@@ -1574,6 +1589,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   async function plansFor(o = {}) {
     const prefer = o.prefer || 'auto', plans = [];
     const gpu = prefer === 'cpu' ? null : await gpuInfo();
+    if (o.onLog) o.onLog('depth engine: GPU ' + (prefer === 'cpu' ? 'not wanted (CPU only)' : gpu ? 'found' : 'not available'), gpu || undefined);
     if (gpu && (gpu.f16 || prefer === 'gpu')) {
       plans.push({ ep: 'webgpu', bundle: 'ort.webgpu.bundle.min.mjs', model: gpu.f16 ? 'fp16' : 'fp32', L: 392 });
       plans.push({ ep: 'wasm', bundle: 'ort.webgpu.bundle.min.mjs', model: 'q8', L: 280 }); // same runtime, already loaded
@@ -1586,23 +1602,33 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   const prefetched = new Map();
   async function prefetch(o = {}) {
     const plan = (await plansFor(o))[0], urls = modelUrls(plan.model, o);
+    if (o.onLog) o.onLog(`depth model prefetch: ${plan.ep}/${plan.model}`);
     if (!prefetched.has(urls[0])) prefetched.set(urls[0], await loadModel(urls, o.onProgress));
     try { await loadOrt(plan.bundle, o.ortBase || ORT_BASE); } catch (e) { console.warn('Runtime prefetch failed', e); }
     return plan;
   }
   async function createEngine(o = {}) {
-    const prog = o.onProgress || (() => { }), base = o.ortBase || ORT_BASE;
-    const plans = await plansFor(o);
+    const prog = o.onProgress || (() => { }), base = o.ortBase || ORT_BASE, log = o.onLog || (() => { });
+    const plans = await plansFor(o), now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    log('depth engine: plans ' + plans.map(p => p.ep + '/' + p.model).join(' → '));
     let lastErr = null;
     for (const plan of plans) {
+      let stage = 'runtime', t0 = now();
       try {
+        log(`depth engine: trying ${plan.ep}/${plan.model} (${plan.bundle})`);
         prog({ stage: 'runtime', note: plan.ep === 'webgpu' ? 'GPU runtime' : 'CPU runtime' });
         const ort = await loadOrt(plan.bundle, base);
+        log(`depth engine: runtime ready in ${Math.round(now() - t0)} ms`, { threads: ort.env.wasm.numThreads, crossOriginIsolated: typeof self !== 'undefined' && !!self.crossOriginIsolated });
+        stage = 'model'; t0 = now();
         prog({ stage: 'model', loaded: 0, total: MODELS[plan.model].mb * 1e6, note: plan.model });
-        const urls = modelUrls(plan.model, o), bytes = prefetched.get(urls[0]) || await loadModel(urls, prog);
+        const urls = modelUrls(plan.model, o), pre = prefetched.get(urls[0]), bytes = pre || await loadModel(urls, prog);
+        log(`depth engine: model ${(bytes.length / 1e6).toFixed(1)} MB ${pre ? '(downloaded while capturing)' : ''} in ${Math.round(now() - t0)} ms`);
+        stage = 'session'; t0 = now();
         prog({ stage: 'session', note: plan.ep });
         const session = await ort.InferenceSession.create(bytes, { executionProviders: [plan.ep], graphOptimizationLevel: 'all' });
         prefetched.delete(urls[0]);
+        log(`depth engine: session created in ${Math.round(now() - t0)} ms`, { inputs: session.inputNames, outputs: session.outputNames });
+        stage = 'probe'; t0 = now();
         const inName = session.inputNames[0], outName = session.outputNames[0];
         const meta = (session.inputMetadata || []).find(m => m.name === inName) || {};
         const half = meta.type === 'float16';
@@ -1628,9 +1654,14 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         // smoke test: a tiny grey image must give a finite map, else fall through to the next plan
         const probe = await engine.infer({ data: new Uint8ClampedArray(56 * 42 * 4).fill(128), w: 42, h: 56 }, 6, 8);
         if (!probe.every(Number.isFinite)) throw Error(plan.ep + ' produced invalid output');
+        log(`depth engine: ${plan.ep}/${plan.model} ready (test inference ${Math.round(now() - t0)} ms, ${half ? 'float16' : 'float32'} input, ${engine.inputLong} px)`);
         prog({ stage: 'ready', note: plan.ep });
         return engine;
-      } catch (e) { lastErr = e; console.warn('Depth engine plan failed', plan, e); }
+      } catch (e) {
+        lastErr = e;
+        log(`depth engine: ${plan.ep}/${plan.model} failed at ${stage}: ${e && e.message || e}`, e && e.stack ? String(e.stack).split('\n').slice(0, 5).join(' | ') : undefined);
+        console.warn('Depth engine plan failed', plan, e);
+      }
     }
     throw lastErr || Error('no depth engine available');
   }
@@ -1641,7 +1672,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 });
 </script>
 <script>
-/* EchoScope v3.1 — room capture with the camera and an on-device AI depth model.
+/* EchoScope v3.2 — room capture with the camera and an on-device AI depth model.
    Capture flow, build pipeline, viewer UI and files. Stitching, viewer and exports live in EchoRoom;
    depth calibration, spot alignment, floor plans and textures in EchoScan; the depth network in EchoDepth. */
 (() => {
@@ -1661,7 +1692,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     'saveCapBtn', 'newBtn', 'diag', 'failActions', 'failSaveBtn', 'failRebuildBtn', 'message', 'camHeight', 'voice', 'camFov', 'armRadius', 'frameRot',
     'camMirror', 'depthEngine', 'modelBtn', 'modelNote', 'rebuildLastBtn', 'saveLastBtn', 'loadCapBtn', 'loadCapFile', 'capture', 'liveVideo', 'demoView',
     'cancelBtn', 'mSpot', 'mShots', 'camPreview', 'roomPrompt', 'capChips', 'mTurn', 'mFloor', 'mCeil', 'panoPreview', 'buildBar', 'buildFill', 'capHint',
-    'capActions', 'nextSpotBtn', 'buildBtn'];
+    'capActions', 'nextSpotBtn', 'buildBtn', 'buildCancelBtn', 'buildLogBtn', 'logBox', 'logPreview', 'logCopyBtn', 'logDownloadBtn', 'logShareBtn', 'logClearBtn',
+    'crashBanner', 'crashTitle', 'crashText', 'crashRebuildBtn', 'crashCopyBtn', 'crashLogBtn', 'crashCapBtn', 'crashCloseBtn', 'savedRow', 'savedText', 'savedRebuildBtn', 'savedDownloadBtn', 'failLogBtn'];
   const ui = {}; for (const id of ids) { ui[id] = $(id); if (!ui[id]) console.warn('missing element #' + id); }
 
   // ---------------------------------------------------------------- helpers
@@ -1683,6 +1715,72 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   const bin = (yaw, n) => ((Math.floor((yaw + Math.PI) / (2 * Math.PI) * n) % n) + n) % n;
   const angleBetween = (a, b) => Math.acos(clamp(a[0] * b[0] + a[1] * b[1] + a[2] * b[2], -1, 1));
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+  // ---------------------------------------------------------------- diagnostics log
+  // Every capture and build step, timing, depth-engine attempt, warning and error is written to
+  // localStorage the moment it happens, so the log survives iOS killing the tab (a page that runs out of
+  // memory is reloaded) and can be copied, downloaded or shared afterwards. No photos go into the log.
+  const VERSION = 'v3.2', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
+  const LOG = [];
+  const getJSON = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } };
+  const setJSON = (key, v) => { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { } };
+  { const old = getJSON(LOG_KEY); if (Array.isArray(old)) LOG.push(...old.slice(-500)); }
+  function safeJson(v) {
+    try { return JSON.stringify(v, (k, x) => typeof x === 'number' && !Number.isInteger(x) ? +x.toFixed(4) : x instanceof Error ? fmtArg(x) : ArrayBuffer.isView(x) ? `[${x.constructor.name} ${x.length}]` : x).slice(0, 1500); }
+    catch (_) { return String(v); }
+  }
+  const fmtArg = a => a instanceof Error || (a && a.stack && a.message) ? `${a.name || 'Error'}: ${a.message}` + (a.stack ? ' | ' + String(a.stack).split('\n').slice(0, 5).join(' | ') : '') : typeof a === 'object' && a ? safeJson(a) : String(a);
+  let logTimer = 0;
+  function persistLog() {
+    clearTimeout(logTimer); logTimer = 0;
+    for (let k = 0; k < 3; k++) { try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); return; } catch (_) { LOG.splice(0, Math.ceil(LOG.length / 3)); } }
+  }
+  // flush = false for chatty entries (written within half a second); steps and errors are written at once
+  function logLine(level, msg, data, flush = true) {
+    const e = { t: Date.now(), l: level, m: String(msg).slice(0, 600) };
+    if (data !== undefined) e.d = typeof data === 'string' ? data.slice(0, 1500) : safeJson(data);
+    LOG.push(e); if (LOG.length > 700) LOG.splice(0, LOG.length - 700);
+    if (flush) persistLog(); else if (!logTimer) logTimer = setTimeout(persistLog, 500);
+    if (ui.logPreview && !ui.logBox.hidden && ui.logBox.open) renderLogPreview();
+  }
+  for (const level of ['error', 'warn']) {
+    const orig = console[level].bind(console);
+    console[level] = (...a) => { try { logLine(level, a.map(fmtArg).join(' ')); } catch (_) { } orig(...a); };
+  }
+  window.addEventListener('error', e => logLine('error', 'uncaught: ' + (e.message || e), e.error ? fmtArg(e.error) : `${e.filename || ''}:${e.lineno || ''}:${e.colno || ''}`));
+  window.addEventListener('unhandledrejection', e => logLine('error', 'unhandled promise rejection: ' + fmtArg(e.reason)));
+  const setBuildState = o => setJSON(BUILD_KEY, o ? Object.assign({ t: Date.now(), v: VERSION }, o) : null);
+  async function deviceInfo() {
+    const n = navigator, i = { app: VERSION, ua: n.userAgent, screen: `${screen.width}x${screen.height}@${window.devicePixelRatio}`, viewport: `${innerWidth}x${innerHeight}`, cores: n.hardwareConcurrency, memoryGB: n.deviceMemory, standalone: STANDALONE, crossOriginIsolated: !!self.crossOriginIsolated, webgpu: !!n.gpu };
+    if (performance.memory) i.jsHeapMB = { used: Math.round(performance.memory.usedJSHeapSize / 1e6), limit: Math.round(performance.memory.jsHeapSizeLimit / 1e6) };
+    try { if (n.storage && n.storage.estimate) { const st = await n.storage.estimate(); i.storageMB = { used: Math.round(st.usage / 1e6), quota: Math.round(st.quota / 1e6) }; } } catch (_) { }
+    return i;
+  }
+  function logText() {
+    const pad = (x, n = 2) => String(x).padStart(n, '0');
+    const ts = t => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`; };
+    const b = getJSON(BUILD_KEY), sv = ROOM.saved;
+    const head = [`EchoScope diagnostics log — exported ${new Date().toString()}`, `App ${VERSION} · ${navigator.userAgent}`, `Page: ${location.origin + location.pathname}`,
+      `Build state: ${b ? safeJson(b) : 'none running'}`, `Saved capture: ${sv ? `${sv.frames} photos in ${sv.spots} spot(s), ${(sv.bytes / 1e6).toFixed(1)} MB${sv.withDepth ? ', with depth maps' : ''}, saved ${new Date(sv.savedAt).toLocaleString()}` : 'none'}`, ''];
+    return head.concat(LOG.map(e => `${ts(e.t)}  ${e.l.padEnd(5)}  ${e.m}${e.d ? '  ' + e.d : ''}`)).join('\n') + '\n';
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (_) {
+      const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px'; document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, text.length); let ok = false; try { ok = document.execCommand('copy'); } catch (_) { } ta.remove(); return ok;
+    }
+  }
+  function notify(text, type) { if (ROOM.building || ROOM.capturing) hint(text, type === 'error', 3500); else setMessage(text, type); }
+  async function copyLog() { notify(await copyText(logText()) ? 'Diagnostics log copied — paste it into a message.' : 'Copying failed — use Download log instead.'); }
+  function downloadLog() { download(new Blob([logText()], { type: 'text/plain' }), `echoscope-log-${stamp()}.txt`); }
+  async function shareLog() {
+    try {
+      const file = new File([logText()], `echoscope-log-${stamp()}.txt`, { type: 'text/plain' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'EchoScope diagnostics log' }); else downloadLog();
+    } catch (e) { if (e && e.name !== 'AbortError') downloadLog(); }
+  }
+  function renderLogPreview() { ui.logPreview.textContent = logText().split('\n').slice(-40).join('\n'); ui.logPreview.scrollTop = ui.logPreview.scrollHeight; }
 
   // ---------------------------------------------------------------- settings (kept in this browser)
   const SETTINGS = ['camHeight', 'armRadius', 'camFov', 'frameRot', 'camMirror', 'voice', 'depthEngine'], SKEY = 'echoscope:v3';
@@ -1743,7 +1841,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     hist: [], doneAt: 0, timer: null, videoReady: false, grab: null, grabCtx: null, stream: null, cueCtx: null,
     view: null, glDirty: true, spin: true, viewMode: 'dollhouse', insideSpot: 0, demo: null, previewAt: 0, previewDirty: false, pano: null,
     engine: null, enginePromise: null, engineListener: null, engineNote: '', engineUsed: '', prefetching: false, build: null, baseRoom: null, room: null, plan: null,
-    model: null, tex: null, diag: '', prompt: '', usdzUrl: null, source: 'live', rebuildSeq: 0, skipArmed: 0, failed: false
+    model: null, tex: null, diag: '', prompt: '', usdzUrl: null, source: 'live', rebuildSeq: 0, skipArmed: 0, failed: false,
+    saved: null, capturedAt: 0, cancel: false, cancelReject: null, stepAt: 0, stepName: '', slowWarned: false, watchdog: 0, lowMem: false
   };
   const allFrames = () => ROOM.spots.flatMap(s => s.frames);
   const nowT = () => ROOM.source === 'demo' && ROOM.demo ? ROOM.demo.t * 1000 : performance.now();
@@ -1841,6 +1940,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       hint(sp.frames.length ? 'This spot isn’t finished — it needs a full turn and the floor. Tap Next spot again to skip it.' : 'Nothing photographed here yet. Tap Next spot again to skip this spot.', true, 4000);
       return;
     }
+    logLine('info', `next spot after spot ${sp.index + 1} (${sp.frames.length} photos${spotUsable(sp) ? '' : ', unfinished — skipped'})`);
     sp.done = true; say('Hold still.'); beginSpot();
   }
   function buildNow() {
@@ -1853,6 +1953,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const R = ROOM, sp = R.spot; if (!R.capturing || !sp) return;
     const demo = R.source === 'demo', t = nowT(); R.lastT = t;
     if (!demo && !R.videoReady) R.videoReady = ui.liveVideo.readyState >= 2 && ui.liveVideo.videoWidth > 0;
+    if (!demo && R.videoReady && !R.loggedVideo) { R.loggedVideo = true; logLine('info', `camera streaming ${ui.liveVideo.videoWidth}x${ui.liveVideo.videoHeight}, screen angle ${screenAngle()}°`); }
+    if (!demo && state.sensorsSeen && !R.loggedSensors) { R.loggedSensors = true; logLine('info', 'motion sensors streaming'); }
     const fwd = demo ? R.demo.cam && R.demo.cam.fwd : state.sensorsSeen ? toSceneQ(state.rawQuat, [0, 0, -1]) : null;
     if (!fwd) { setPrompt('HOLD STILL', 'waiting for the motion sensors…'); return; }
     R.hist.push({ t, f: fwd }); while (R.hist.length > 2 && t - R.hist[0].t > 300) R.hist.shift();
@@ -1872,6 +1974,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       const f = demo ? demoFrame() : grabFrame();
       if (f) {
         f.spot = sp.index; f.pitch = pitch; sp.frames.push(f);
+        if (sp.frames.length % 10 === 0) logLine('info', `spot ${sp.index + 1}: ${sp.frames.length} photos (step ${R.step || 'turn'})`, undefined, false);
         R.pano.add({ data: f.data, w: f.w, h: f.h, cam: frameCam(f) }, f.fov || camFov());
         R.lastShot = fwd; R.shotAt = t; R.previewDirty = true; cue('tick'); drawCamPreview(f);
         if (pitch < -30 * DEG) sp.floorBins[bin(yaw, 8)] = 1; else if (pitch > 30 * DEG) sp.ceilBins[bin(yaw, 8)] = 1;
@@ -1886,6 +1989,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       say(step === 'turn' ? 'Now turn slowly on the spot.' : step === 'floor' ? 'Tilt down to the floor and turn around once more.' : step === 'ceiling' ? 'Now look up at the ceiling.'
         : last ? 'Spot done. Tap build.' : 'Spot done. Walk to another spot and tap next spot, or tap build.');
       R.step = step;
+      logLine('info', `spot ${sp.index + 1}: step ${step}`, { photos: sp.frames.length, floorDirs: floorN, ceilDirs: ceilN }, false);
       if (step === 'done') { sp.done = true; R.doneAt = t; }
     }
     const slow = !steady ? 'slower please — photos need a steady phone' : '';
@@ -1941,7 +2045,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     }
     const sensorPromise = demo ? Promise.resolve() : requestSensors();
     openCapture(demo); setPrompt('STARTING…', demo ? 'synthetic room' : 'allow the camera and motion access');
-    Object.assign(R, { capturing: true, spots: [], spot: null, failed: false });
+    Object.assign(R, { capturing: true, spots: [], spot: null, failed: false, capturedAt: Date.now(), loggedVideo: false, loggedSensors: false });
+    logLine('info', `capture started (${R.source})`, { camHeightCm: +ui.camHeight.value, fovDeg: +ui.camFov.value, armCm: +ui.armRadius.value, orientation: ui.frameRot.value, engine: ui.depthEngine.value });
+    if (!demo) setBuildState({ state: 'capturing', source: R.source });
     syncCaptureButtons(); ui.failActions.hidden = true;
     try {
       if (!demo) {
@@ -1964,7 +2070,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       state.mode = 'capturing';
       setMessage('');
     } catch (e) {
-      console.error('Room capture start failed', e); roomCleanup(); R.capturing = false; closeCapture(); syncCaptureButtons();
+      console.error('Room capture start failed', e); roomCleanup(); R.capturing = false; closeCapture(); syncCaptureButtons(); setBuildState(null);
       const msg = e.name === 'NotAllowedError' ? 'Camera permission was denied. Allow camera access for this site in the browser settings and try again.'
         : e.name === 'NotFoundError' || e.name === 'OverconstrainedError' ? 'No camera was found on this device. The demo works without one.'
           : e.name === 'NotReadableError' ? 'The camera is in use by another app.' : (e.message || String(e));
@@ -1983,6 +2089,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   function roomFinish(build = true) {
     const R = ROOM; if (!R.capturing) return;
     R.capturing = false; roomCleanup(); state.mode = 'idle';
+    logLine('info', `capture ${build ? 'finished' : 'cancelled'}`, R.spots.map(s => ({ photos: s.frames.length, floor: s.frames.filter(f => f.pitch < -0.5).length, ceiling: s.frames.filter(f => f.pitch > 0.5).length, usable: spotUsable(s) })));
+    if (!build || !usableSpots().length) setBuildState(null);
     if (window.speechSynthesis && !build) { try { speechSynthesis.cancel(); } catch (_) { } }
     syncCaptureButtons();
     if (build && usableSpots().length) { roomBuild(); return; }
@@ -2035,7 +2143,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
   function engineOpts(extra = {}) {
     const q = new URLSearchParams(location.search);
-    return Object.assign({ prefer: ui.depthEngine.value, ortBase: q.get('ort') || undefined, modelBase: q.get('model') || undefined }, extra);
+    const onLog = (m, d) => {
+      logLine('info', m, d);
+      const t = /trying (webgpu|wasm)/.exec(m);
+      if (t) { ROOM.engineTrying = t[1] === 'webgpu' ? 'GPU' : 'CPU'; const b = getJSON(BUILD_KEY); if (b && (b.state === 'running' || b.state === 'engine')) setBuildState(Object.assign(b, { engine: ROOM.engineTrying + ' (starting)' })); }
+    };
+    return Object.assign({ prefer: ROOM.forceCpu ? 'cpu' : ui.depthEngine.value, ortBase: q.get('ort') || undefined, modelBase: q.get('model') || undefined, onLog }, extra);
   }
   function prefetchModel() {
     const R = ROOM; if (R.prefetching) return; R.prefetching = true;
@@ -2063,84 +2176,158 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   const depthDims = f => f.w >= f.h ? { dw: DEPTH_LONG, dh: Math.round(DEPTH_LONG * f.h / f.w) } : { dw: Math.round(DEPTH_LONG * f.w / f.h), dh: DEPTH_LONG };
 
   // ---- build: AI depth → per-spot calibration → spot alignment → floor plan → textures → 3D model
+  // Each step is logged (and written to storage) before it runs, so a crash leaves a trail. The capture is
+  // saved first, and again once the depth maps exist, so a crash loses nothing. Cancel works between
+  // steps and while waiting for the depth engine.
+  function buildStep(name, data) {
+    const R = ROOM; R.stepName = name; R.stepAt = performance.now(); R.slowWarned = false;
+    logLine('step', name, data === undefined ? undefined : data);
+    setBuildState({ state: 'running', step: name, source: R.source, engine: R.engineUsed || '', frames: allFrames().length, mem: memMB() });
+  }
+  function memMB() {
+    const R = ROOM; let b = 0;
+    for (const f of allFrames()) b += (f.data ? f.data.byteLength : 0) + (f.disp ? f.disp.byteLength : 0) + (f.jpeg ? f.jpeg.byteLength : 0);
+    const B = R.build; if (B) { for (const sp of B.spots3) if (sp.cloud) b += sp.cloud.pos.byteLength + sp.cloud.col.byteLength; if (B.views) for (const v of B.views) if (v.pano) b += v.pano.data.byteLength; }
+    const o = { ourDataMB: Math.round(b / 1e6) };
+    if (performance.memory) o.jsHeapMB = Math.round(performance.memory.usedJSHeapSize / 1e6);
+    return o;
+  }
+  const checkCancel = () => { if (ROOM.cancel) throw Object.assign(Error('cancelled'), { cancelled: true }); };
+  function cancelBuild() {
+    const R = ROOM; if (!R.building || R.cancel) return;
+    R.cancel = true; logLine('warn', `build cancelled by the user during “${R.stepName}”`);
+    hint('Cancelling…', true, 3000); if (R.cancelReject) R.cancelReject(Object.assign(Error('cancelled'), { cancelled: true }));
+  }
   async function roomBuild() {
-    const R = ROOM; if (R.building) return; R.building = true; syncCaptureButtons();
-    const demo = R.source === 'demo';
+    const R = ROOM; if (R.building) return;
+    Object.assign(R, { building: true, cancel: false }); syncCaptureButtons();
+    const cancelled = new Promise((_, rej) => { R.cancelReject = rej; }); cancelled.catch(() => { });
+    const demo = R.source === 'demo', t00 = performance.now(), recover = demo ? null : getJSON(RECOVER_KEY);
+    R.lowMem = !!(recover && recover.lowMem);
     openCapture(demo); ui.capture.classList.add('building'); ui.liveVideo.hidden = true; ui.demoView.hidden = true;
     hint('Keep this page open; everything runs on this device.');
+    R.watchdog = setInterval(() => { // a step that takes unusually long is logged and explained
+      const s = (performance.now() - R.stepAt) / 1000;
+      if (s > 45 && !R.slowWarned) { R.slowWarned = true; logLine('warn', `step “${R.stepName}” still running after ${Math.round(s)} s`, memMB()); hint(`Still on “${R.stepName}” after ${Math.round(s)} s. If it seems stuck: Copy log, then Cancel.`, true, 15000); }
+    }, 2000);
     let ok = false;
     try {
       const spots = usableSpots();
+      buildStep('build started', { source: R.source, spots: R.spots.map(sp => ({ photos: sp.frames.length, usable: spotUsable(sp) })), camHeightCm: +ui.camHeight.value, fovDeg: +ui.camFov.value, armCm: +ui.armRadius.value, recovery: recover || undefined });
+      deviceInfo().then(i => logLine('info', 'device', i)).catch(() => { });
       if (!spots.length) throw Error('no spot has both a full turn and floor photos');
-      const todo = spots.flatMap(s => s.frames).filter(f => !f.disp), P = todo.length ? 0.7 : 0;
+      const todo = spots.flatMap(sp => sp.frames).filter(f => !f.disp), P = todo.length ? 0.7 : 0;
+      if (todo.length && !demo) { setBuildProgress(0, 'saving the capture first'); buildStep('autosave before depth'); await autosave('before depth'); }
       if (todo.length) {
         setBuildProgress(0, demo ? 'synthetic depth (stand-in for the AI)' : 'loading the AI depth model');
         let eng;
         if (demo) eng = demoEngine();
-        else { R.engineListener = sub => setBuildProgress(0, sub); try { eng = await getEngine(); } finally { R.engineListener = null; } }
+        else {
+          if (recover && recover.cpu && ui.depthEngine.value !== 'cpu') {
+            logLine('warn', 'the last build stopped in the depth stage on the GPU: using the CPU depth engine this time');
+            if (R.engine && R.engine.kind === 'webgpu') { try { await R.engine.dispose(); } catch (_) { } R.engine = null; R.enginePromise = null; }
+            R.forceCpu = true;
+          }
+          R.engineUsed = ''; R.engineTrying = '';
+          buildStep('loading the depth engine', { prefer: R.forceCpu ? 'cpu' : ui.depthEngine.value });
+          R.engineListener = sub => setBuildProgress(0, sub);
+          try { eng = await Promise.race([getEngine(), cancelled]); } finally { R.engineListener = null; }
+        }
         R.engineUsed = eng.kind === 'mock' ? 'synthetic' : `${eng.kind === 'webgpu' ? 'GPU' : 'CPU'} · ${eng.model === 'q8' ? '8-bit' : eng.model}`;
+        buildStep(`depth maps (${R.engineUsed})`, { photos: todo.length });
         const t0 = performance.now();
         for (let i = 0; i < todo.length; i++) {
-          const f = todo[i], { dw, dh } = depthDims(f);
+          checkCancel();
+          const f = todo[i], { dw, dh } = depthDims(f), ti = performance.now();
           const eta = i >= 3 ? ` · about ${Math.ceil((performance.now() - t0) / i * (todo.length - i) / 1000)} s left` : '';
           setBuildProgress(P * i / todo.length, `${demo ? 'synthetic' : 'AI'} depth ${i + 1}/${todo.length} photos${eta}`);
+          if (i === 0 || i % 10 === 0) setBuildState({ state: 'running', step: `depth map ${i + 1}/${todo.length}`, source: R.source, engine: R.engineUsed, frames: allFrames().length, mem: memMB() });
           await nextFrame();
-          f.disp = await eng.infer({ data: f.data, w: f.w, h: f.h, frame: f }, dw, dh); f.dw = dw; f.dh = dh;
+          f.disp = await Promise.race([eng.infer({ data: f.data, w: f.w, h: f.h, frame: f }, dw, dh), cancelled]); f.dw = dw; f.dh = dh;
+          if (i < 3 || (i + 1) % 10 === 0 || i === todo.length - 1) logLine('info', `depth map ${i + 1}/${todo.length}: ${Math.round(performance.now() - ti)} ms`, i === todo.length - 1 ? memMB() : undefined, i < 3);
+        }
+        logLine('info', `depth maps done: ${todo.length} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+        if (!demo) {
+          // free the network (GPU buffers, model) before the memory-hungry steps; it reloads from the cache
+          if (R.engine) { try { await R.engine.dispose(); } catch (_) { } R.engine = null; R.enginePromise = null; logLine('info', 'depth engine released'); }
+          setBuildProgress(P, 'saving the depth maps'); buildStep('autosave with depth maps'); await autosave('with depth maps');
         }
       }
+      checkCancel();
       const camH = demo ? S3.DEMO_HOUSE.camHeight : camHeightSet(), arm = demo ? DEMO_ARM : armRadius();
       const used = [], skipped = [];
       for (let k = 0; k < spots.length; k++) {
-        setBuildProgress(P + (1 - P) * 0.4 * k / spots.length, `calibrating depth · spot ${k + 1}/${spots.length}`); await nextFrame();
+        setBuildProgress(P + (1 - P) * 0.4 * k / spots.length, `calibrating depth · spot ${k + 1}/${spots.length}`);
+        buildStep(`calibrating spot ${k + 1}/${spots.length}`, { photos: spots[k].frames.length }); await nextFrame(); checkCancel();
+        const tk = performance.now();
         const frames = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, rgba: f.data, cw: f.w, ch: f.h }; });
         const cal = S3.calibrateSpot(frames, camH);
-        if (!cal.floorPhotos) { skipped.push(spots[k].index + 1); continue; }
+        logLine('info', `spot ${k + 1} calibrated in ${Math.round(performance.now() - tk)} ms`, { floorPhotos: cal.floorPhotos, droppedAnchors: cal.droppedAnchors, rows: cal.rows, floorRows: cal.floorRows });
+        if (!cal.floorPhotos) { skipped.push(spots[k].index + 1); logLine('warn', `spot ${k + 1}: no floor found in its downward photos — left out`); continue; }
         const cloud = S3.spotCloud(frames, cal.cal), st = S3.spotStructure(cloud, camH);
+        logLine('info', `spot ${k + 1}: ${cloud.n} depth points, ceiling ${st.ceil ? st.ceil.toFixed(2) + ' m' : 'not seen'}`);
         used.push({ frames, cal, cloud, ceil: st.ceil, prof: st.prof, camHeight: camH, index: spots[k].index, photos: frames.length });
       }
       if (!used.length) throw Error('the floor could not be found in the photos aimed down, so the scale is unknown. Tilt further down (about 45°) so most of each floor photo shows floor, in good light');
-      setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by their walls' : 'tracing the walls'); await nextFrame();
+      setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by their walls' : 'tracing the walls');
+      buildStep(used.length > 1 ? 'aligning spots' : 'single spot'); await nextFrame(); checkCancel();
       const poses = used.length > 1 ? S3.alignSpots(used, { yawSpan: 8 }) : [{ x: 0, z: 0, yaw: 0 }];
+      if (used.length > 1) logLine('info', 'spot poses', poses.map(p => ({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), yawDeg: +(p.yaw / DEG).toFixed(1) })));
       R.build = { spots3: used, poses, camH, arm, skipped, scale: 1, ceilOverride: null, views: null };
       R.insideSpot = 0;
-      if (!await finishModel((f, sub) => setBuildProgress(P + (1 - P) * (0.5 + 0.5 * f), sub))) return;
+      if (!await finishModel((f, sub) => setBuildProgress(P + (1 - P) * (0.5 + 0.5 * f), sub), true)) return;
       ok = true; R.failed = false;
       setBuildProgress(1, 'done');
       showResult(true); setView('dollhouse');
       roomMessage();
+      const z = roomDims();
+      logLine('info', `build finished in ${((performance.now() - t00) / 1000).toFixed(1)} s`, { areaM2: +z.area.toFixed(2), corners: z.corners, ceilingM: +z.height.toFixed(2), spots: used.length, mem: memMB() });
+      setJSON(RECOVER_KEY, null); R.forceCpu = false;
       say('Your room is ready.');
       ui.stage.scrollIntoView({ block: 'start', behavior: 'smooth' });
     } catch (e) {
-      console.error('Room build failed', e); R.failed = true;
-      setMessage('Building the room failed: ' + (e.message || e) + '. The photos are kept — save the raw capture to rebuild it later or to share it for tuning.', 'error');
+      if (e && e.cancelled) { R.failed = false; setMessage('Build cancelled. The photos are kept: “Try the build again” or save the raw capture.', 'warn'); }
+      else {
+        console.error('Room build failed', e); R.failed = true;
+        setMessage('Building the room failed: ' + (e.message || e) + '. The photos are kept — save the raw capture to rebuild it later or to share it for tuning, and use Copy log to send the diagnostics.', 'error');
+      }
     } finally {
-      R.building = false; closeCapture(); syncCaptureButtons();
+      clearInterval(R.watchdog); R.building = false; R.cancelReject = null; setBuildState(null);
+      closeCapture(); syncCaptureButtons();
       ui.failActions.hidden = ok || !allFrames().length;
       if (!ok && R.room) showResult(true);
       if (!ok) setTimeout(() => ui.message.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
     }
   }
   // Floor plan, textures and model from the calibrated spots (re-run by "straight walls" and the ceiling).
-  async function finishModel(prog) {
+  async function finishModel(prog, logSteps = false) {
     const R = ROOM, B = R.build, seq = ++R.rebuildSeq; if (!B) return false;
+    const step = (name, data) => { if (logSteps) buildStep(name, data); };
+    step('floor plan');
     const plan = S3.floorPlan(B.spots3, B.poses, { snap: ui.straightWalls.checked });
-    const ceils = B.spots3.map(s => s.ceil).filter(Boolean).sort((a, b) => a - b);
+    if (logSteps) logLine('info', `floor plan: ${plan.poly.length} corners, ${plan.area ? plan.area.toFixed(2) : '?'} m², ${plan.snapped ? 'straightened' : 'as measured'}`);
+    const ceils = B.spots3.map(sp => sp.ceil).filter(Boolean).sort((a, b) => a - b);
     const height = B.ceilOverride != null ? B.ceilOverride / B.scale : ceils.length ? ceils[ceils.length >> 1] : 2.45;
     const base = { poly: plan.poly, height, camHeight: B.camH, spots: B.poses.map(p => ({ x: p.x, z: p.z, yaw: p.yaw })) };
+    const PW = R.lowMem ? 1024 : 1536, TEX = R.lowMem ? 56 : 80;
     if (!B.views) {
       B.views = [];
       for (let k = 0; k < B.spots3.length; k++) {
-        if (prog) prog(0.4 * k / B.spots3.length, `stitching photos · spot ${k + 1}/${B.spots3.length}`); await nextFrame();
-        const sp = B.spots3[k], depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.frames, depth, sp.frames[0].fov, 1536, 768);
+        if (prog) prog(0.4 * k / B.spots3.length, `stitching photos · spot ${k + 1}/${B.spots3.length}`);
+        step(`stitching spot ${k + 1}/${B.spots3.length}`, { panorama: `${PW}x${PW / 2}` }); await nextFrame(); checkCancel();
+        const sp = B.spots3[k], depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.frames, depth, sp.frames[0].fov, PW, PW / 2);
         B.views.push({ depth, pano: pano.image, coverage: pano.coverage });
       }
     }
     const faces = S3.roomFaces(base), tex = [];
     for (let i = 0; i < faces.length; i++) {
       if (prog) prog(0.4 + 0.6 * i / faces.length, `texturing ${faces[i].kind === 'wall' ? 'walls' : faces[i].kind} · ${i + 1}/${faces.length}`);
+      if (logSteps && (i === 0 || faces[i].kind !== 'wall')) step(`texturing ${faces[i].kind === 'wall' ? 'walls' : faces[i].kind} (${i + 1}/${faces.length})`, { res: TEX });
       await nextFrame(); if (seq !== R.rebuildSeq) return false; // superseded by a newer request
-      tex.push(S3.faceTexture3(base, B.views, faces[i], { res: 80 }));
+      if (logSteps) checkCancel();
+      tex.push(S3.faceTexture3(base, B.views, faces[i], { res: TEX }));
     }
+    step('showing the model');
     R.plan = plan; R.baseRoom = base; R.tex = tex;
     applyScale();
     invalidateAR(); updateRoomSummary(); syncAdjust();
@@ -2285,28 +2472,90 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
   // Photos (JPEG) with orientation, the AI depth maps, spots and settings: a capture survives a reload, can be
   // rebuilt by a later version without re-running the AI, or shared for tuning.
+  async function packCapture() {
+    const R = ROOM, files = [], meta = {
+      format: 'echoscope-capture', version: 2, created: new Date(R.capturedAt || Date.now()).toISOString(), saved: new Date().toISOString(), app: 'EchoScope ' + VERSION, userAgent: navigator.userAgent, mode: R.source,
+      settings: { camFov: +ui.camFov.value, armRadius: +ui.armRadius.value, camHeight: +ui.camHeight.value, frameRot: ui.frameRot.value, camMirror: ui.camMirror.checked },
+      depthEngine: R.engineUsed || null, spots: R.spots.map(sp => ({ frames: sp.frames.length })), frames: []
+    };
+    let i = 0;
+    for (const sp of R.spots) for (const f of sp.frames) {
+      const id = String(i++).padStart(3, '0'), name = `frames/${id}.jpg`;
+      if (!f.jpeg) f.jpeg = new Uint8Array(await (await rgbaToPng(f, 'image/jpeg', 0.9)).arrayBuffer()); // encoded once, reused
+      files.push({ name, data: f.jpeg });
+      const fm = { file: name, w: f.w, h: f.h, spot: sp.index, pitch: f.pitch ?? null, q: f.q || null, theta: f.theta ?? null, heading: f.heading ?? null, camKind: f.camKind || 'back', cam: f.cam || null, pos: f.pos || null, fov: f.fov || null };
+      if (f.disp) { const dn = `depth/${id}.f32`; files.push({ name: dn, data: new Uint8Array(f.disp.buffer, f.disp.byteOffset, f.disp.byteLength) }); fm.depth = { file: dn, w: f.dw, h: f.dh }; }
+      meta.frames.push(fm);
+    }
+    files.unshift({ name: 'capture.json', data: new TextEncoder().encode(JSON.stringify(meta)) });
+    return new Blob([RM.zipStore(files)], { type: 'application/zip' });
+  }
   async function saveCapture() {
     const R = ROOM, frames = allFrames();
     if (!frames.length) { setMessage('Nothing captured yet.', 'warn'); return; }
     try {
-      setMessage('Packing the raw capture…');
-      const files = [], meta = {
-        format: 'echoscope-capture', version: 2, created: new Date().toISOString(), app: 'EchoScope v3.1', userAgent: navigator.userAgent, mode: R.source,
-        settings: { camFov: +ui.camFov.value, armRadius: +ui.armRadius.value, camHeight: +ui.camHeight.value, frameRot: ui.frameRot.value, camMirror: ui.camMirror.checked },
-        depthEngine: R.engineUsed || null, spots: R.spots.map(s => ({ frames: s.frames.length })), frames: []
-      };
-      let i = 0;
-      for (const s of R.spots) for (const f of s.frames) {
-        const id = String(i++).padStart(3, '0'), name = `frames/${id}.jpg`;
-        files.push({ name, data: new Uint8Array(await (await rgbaToPng(f, 'image/jpeg', 0.9)).arrayBuffer()) });
-        const fm = { file: name, w: f.w, h: f.h, spot: s.index, pitch: f.pitch ?? null, q: f.q || null, theta: f.theta ?? null, heading: f.heading ?? null, camKind: f.camKind || 'back', cam: f.cam || null, pos: f.pos || null, fov: f.fov || null };
-        if (f.disp) { const dn = `depth/${id}.f32`; files.push({ name: dn, data: new Uint8Array(f.disp.buffer.slice(f.disp.byteOffset, f.disp.byteOffset + f.disp.byteLength)) }); fm.depth = { file: dn, w: f.dw, h: f.dh }; }
-        meta.frames.push(fm);
-      }
-      files.unshift({ name: 'capture.json', data: new TextEncoder().encode(JSON.stringify(meta)) });
-      download(new Blob([RM.zipStore(files)], { type: 'application/zip' }), `echoscope-capture-${stamp()}.zip`);
-      setMessage(`Raw capture saved (${R.spots.length} spot${R.spots.length > 1 ? 's' : ''}, ${frames.length} photos${frames.some(f => f.disp) ? ', with depth maps' : ''}). Open it later with “Open a saved raw capture…”.`);
-    } catch (e) { setMessage('Saving the capture failed: ' + e.message, 'error'); }
+      notify('Packing the raw capture…');
+      download(await packCapture(), `echoscope-capture-${stamp()}.zip`);
+      notify(`Raw capture saved (${R.spots.length} spot${R.spots.length > 1 ? 's' : ''}, ${frames.length} photos${frames.some(f => f.disp) ? ', with depth maps' : ''}). Open it later with “Open a saved raw capture…”.`);
+    } catch (e) { logLine('error', 'saving the raw capture failed: ' + fmtArg(e)); setMessage('Saving the capture failed: ' + e.message, 'error'); }
+  }
+  // ---- autosave: the last capture is kept in this browser (IndexedDB) so a crash loses nothing
+  const IDB_NAME = 'echoscope', IDB_STORE = 'captures';
+  function idbOpen() {
+    return new Promise((res, rej) => {
+      if (!window.indexedDB) { rej(Error('IndexedDB unavailable')); return; }
+      const r = indexedDB.open(IDB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error || Error('IndexedDB open failed'));
+    });
+  }
+  async function idbTx(mode, fn) {
+    const db = await idbOpen();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, mode), rq = fn(tx.objectStore(IDB_STORE)); let out;
+      if (rq) rq.onsuccess = () => { out = rq.result; };
+      tx.oncomplete = () => { db.close(); res(out); }; tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || Error('IndexedDB failed')); };
+    });
+  }
+  const idbPut = (k, v) => idbTx('readwrite', st => st.put(v, k)), idbGet = k => idbTx('readonly', st => st.get(k)), idbDel = k => idbTx('readwrite', st => st.delete(k));
+  async function autosave(why) {
+    const R = ROOM; if (R.source === 'demo' || R.source === 'demo-file' || !allFrames().length) return;
+    const t0 = performance.now();
+    try {
+      const blob = await packCapture(), withDepth = allFrames().every(f => f.disp);
+      const rec = { created: R.capturedAt || Date.now(), savedAt: Date.now(), app: VERSION, frames: allFrames().length, spots: R.spots.length, withDepth, bytes: blob.size, blob };
+      await idbPut('last', rec);
+      R.saved = Object.assign({}, rec, { blob: undefined });
+      logLine('info', `capture saved in this browser (${why}): ${rec.frames} photos, ${(blob.size / 1e6).toFixed(1)} MB${withDepth ? ', with depth maps' : ''}, ${Math.round(performance.now() - t0)} ms`);
+      syncSavedUI();
+    } catch (e) { logLine('warn', 'saving the capture in this browser failed: ' + fmtArg(e)); }
+  }
+  function syncSavedUI() {
+    const sv = ROOM.saved; ui.savedRow.hidden = !sv;
+    if (sv) setText('savedText', `Saved in this browser: ${sv.frames} photos, ${sv.spots} spot${sv.spots > 1 ? 's' : ''}${sv.withDepth ? ', with depth maps' : ''} · ${new Date(sv.created).toLocaleString()}`);
+  }
+  async function rebuildSaved() {
+    if (ROOM.capturing || ROOM.building) return;
+    try { const rec = await idbGet('last'); if (!rec || !rec.blob) throw Error('no saved capture'); ui.crashBanner.hidden = true; logLine('info', 'rebuilding the capture saved in this browser'); await loadCapture(rec.blob); }
+    catch (e) { setMessage('Could not open the saved capture: ' + (e.message || e), 'error'); }
+  }
+  async function downloadSaved() {
+    try { const rec = await idbGet('last'); if (!rec || !rec.blob) throw Error('no saved capture'); download(rec.blob, `echoscope-capture-${new Date(rec.created).toISOString().replace(/[:.]/g, '-')}.zip`); }
+    catch (e) { setMessage('Could not read the saved capture: ' + (e.message || e), 'error'); }
+  }
+  // After a reload: did the last capture or build stop half-way (iOS kills a tab that runs out of memory)?
+  function checkLastSession() {
+    const b = getJSON(BUILD_KEY); setBuildState(null);
+    logLine('info', `page loaded (${VERSION})`, { ua: navigator.userAgent, viewport: `${innerWidth}x${innerHeight}` });
+    if (!b || (b.state !== 'running' && b.state !== 'capturing' && b.state !== 'engine')) return;
+    const what = b.state === 'capturing' ? 'during a capture' : b.state === 'engine' ? 'while starting the AI depth engine' : `while building, at “${b.step}”`;
+    logLine('error', `the previous session ended unexpectedly ${what}`, b);
+    if (b.state !== 'capturing') setJSON(RECOVER_KEY, { cpu: /depth/.test(b.step || '') && /GPU/.test(b.engine || ''), lowMem: b.state === 'running', from: b.step, t: Date.now() });
+    ui.crashBanner.hidden = false;
+    setText('crashTitle', b.state === 'capturing' ? 'The last capture stopped unexpectedly' : b.state === 'engine' ? 'The AI depth engine didn’t start' : 'The last room build didn’t finish');
+    setText('crashText', `The page stopped ${what} (${new Date(b.t).toLocaleTimeString()}). On a phone this usually means it ran out of memory and Safari reloaded the page. ` +
+      (b.state === 'running' ? 'The capture was saved first: rebuild it below — the next build uses ' + (/depth/.test(b.step || '') && /GPU/.test(b.engine || '') ? 'the CPU depth engine and ' : '') + 'lighter settings that need less memory. ' : '') +
+      'Please send the log (Copy log), and the capture if the rebuild fails too.');
+    ui.crashRebuildBtn.hidden = b.state !== 'running'; ui.crashCapBtn.hidden = b.state !== 'running';
   }
   async function loadCapture(file) {
     if (ROOM.capturing || ROOM.building) { setMessage('Finish the current capture first.', 'warn'); return; }
@@ -2323,23 +2572,25 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       ui.camMirror.checked = !!st.camMirror;
       updateControls();
       const spots = [], mk = i => spots[i] || (spots[i] = { index: i, frames: [], bins: new Uint8Array(36), floorBins: new Uint8Array(8), ceilBins: new Uint8Array(8), done: true });
+      const c = document.createElement('canvas'), cx = c.getContext('2d', { willReadFrequently: true });
       for (const fm of meta.frames || []) {
         const bytes = z[fm.file]; if (!bytes) continue;
         const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
-        const c = document.createElement('canvas'); c.width = fm.w; c.height = fm.h;
-        const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(bmp, 0, 0, fm.w, fm.h);
-        const f = { data: cx.getImageData(0, 0, fm.w, fm.h).data, w: fm.w, h: fm.h, q: fm.q, theta: fm.theta, heading: fm.heading, camKind: fm.camKind || (v1 ? 'selfie' : 'back') };
+        if (c.width !== fm.w || c.height !== fm.h) { c.width = fm.w; c.height = fm.h; }
+        cx.drawImage(bmp, 0, 0, fm.w, fm.h); if (bmp.close) bmp.close();
+        const f = { data: cx.getImageData(0, 0, fm.w, fm.h).data, w: fm.w, h: fm.h, q: fm.q, theta: fm.theta, heading: fm.heading, camKind: fm.camKind || (v1 ? 'selfie' : 'back'), jpeg: bytes };
         if (fm.cam) f.cam = fm.cam; if (fm.pos) f.pos = fm.pos; if (fm.fov) f.fov = fm.fov;
         if (fm.depth && z[fm.depth.file]) { const raw = z[fm.depth.file]; f.disp = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); f.dw = fm.depth.w; f.dh = fm.depth.h; }
         const fw = frameCam(f).fwd, pitch = fm.pitch ?? Math.asin(clamp(fw[1], -1, 1)), yaw = Math.atan2(fw[0], -fw[2]);
         f.pitch = pitch; const s = mk(fm.spot || 0); f.spot = s.index; s.frames.push(f);
         if (Math.abs(pitch) < 25 * DEG) s.bins[bin(yaw, 36)] = 1; else if (pitch < -30 * DEG) s.floorBins[bin(yaw, 8)] = 1; else if (pitch > 30 * DEG) s.ceilBins[bin(yaw, 8)] = 1;
       }
-      Object.assign(ROOM, { spots: spots.filter(Boolean), spot: null, source: meta.mode === 'demo' ? 'demo-file' : 'loaded', engineUsed: meta.depthEngine || '' });
+      Object.assign(ROOM, { spots: spots.filter(Boolean), spot: null, source: meta.mode === 'demo' ? 'demo-file' : 'loaded', engineUsed: meta.depthEngine || '', capturedAt: Date.parse(meta.created) || Date.now() });
+      logLine('info', `opened a raw capture: ${allFrames().length} photos in ${ROOM.spots.length} spot(s)`, { created: meta.created, app: meta.app, withDepth: allFrames().every(f => f.disp) });
       const needAI = allFrames().some(f => !f.disp);
       await roomBuild();
       if (ROOM.room && !ROOM.failed) setMessage(`Opened a capture from ${new Date(meta.created).toLocaleString()} (${ROOM.spots.length} spot${ROOM.spots.length > 1 ? 's' : ''}, ${allFrames().length} photos${v1 ? ', made with the sonar version — rebuilt from its photos alone' : ''}) and rebuilt it${needAI ? ' using the AI depth model' : ' from its saved depth maps'}.`);
-    } catch (e) { console.error(e); setMessage('Could not open that capture: ' + (e.message || e), 'error'); }
+    } catch (e) { console.error('Opening a capture failed', e); setMessage('Could not open that capture: ' + (e.message || e), 'error'); }
   }
   const facePngs = () => Promise.all(ROOM.tex.map(t => rgbaToPng(t).then(b => b.arrayBuffer())));
   async function exportGLB() {
@@ -2426,10 +2677,21 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   ui.saveCapBtn.addEventListener('click', saveCapture); ui.saveLastBtn.addEventListener('click', saveCapture); ui.failSaveBtn.addEventListener('click', saveCapture);
   ui.depthEngine.addEventListener('change', () => { const R = ROOM; if (R.engine) { R.engine.dispose(); R.engine = null; } R.enginePromise = null; setText('modelNote', 'The depth engine will load when it is next needed.'); });
   ui.modelBtn.addEventListener('click', () => {
+    if (ROOM.building || ROOM.capturing) return;
     setMessage('Loading the AI depth model. It is downloaded once and then kept by this browser.');
-    getEngine().then(e => setMessage(`The AI depth model is ready (${e.kind === 'webgpu' ? 'on the GPU' : 'on the CPU'}). Room captures will use it.`)).catch(e => setMessage('The AI depth model could not be loaded: ' + (e.message || e), 'error'));
+    logLine('step', 'starting the depth engine (Get the AI depth model)'); setBuildState({ state: 'engine', step: 'starting the depth engine' });
+    getEngine().then(e => { setBuildState(null); setMessage(`The AI depth model is ready (${e.kind === 'webgpu' ? 'on the GPU' : 'on the CPU'}). Room captures will use it.`); })
+      .catch(e => { setBuildState(null); setMessage('The AI depth model could not be loaded: ' + (e.message || e), 'error'); });
   });
   ui.loadCapBtn.addEventListener('click', () => ui.loadCapFile.click());
+  ui.buildCancelBtn.addEventListener('click', cancelBuild); ui.buildLogBtn.addEventListener('click', copyLog);
+  ui.logCopyBtn.addEventListener('click', copyLog); ui.logDownloadBtn.addEventListener('click', downloadLog); ui.logShareBtn.addEventListener('click', shareLog);
+  ui.logClearBtn.addEventListener('click', () => { LOG.length = 0; persistLog(); logLine('info', 'log cleared'); renderLogPreview(); });
+  ui.logBox.addEventListener('toggle', () => { if (ui.logBox.open) renderLogPreview(); });
+  ui.crashRebuildBtn.addEventListener('click', rebuildSaved); ui.crashCopyBtn.addEventListener('click', copyLog); ui.crashLogBtn.addEventListener('click', downloadLog);
+  ui.crashCapBtn.addEventListener('click', downloadSaved); ui.failLogBtn.addEventListener('click', copyLog); ui.crashCloseBtn.addEventListener('click', () => { ui.crashBanner.hidden = true; });
+  ui.savedRebuildBtn.addEventListener('click', rebuildSaved); ui.savedDownloadBtn.addEventListener('click', downloadSaved);
+  ui.logShareBtn.hidden = !(navigator.canShare && (() => { try { return navigator.canShare({ files: [new File(['x'], 'x.txt', { type: 'text/plain' })] }); } catch (_) { return false; } })());
   ui.loadCapFile.addEventListener('change', () => { const f = ui.loadCapFile.files && ui.loadCapFile.files[0]; ui.loadCapFile.value = ''; if (f) loadCapture(f); });
   ui.viewSeg.addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) setView(b.dataset.view); });
   ui.showPts.addEventListener('change', () => { if (ROOM.view) { ROOM.view.cam.showPoints = ui.showPts.checked; setPoints(); ROOM.glDirty = true; } });
@@ -2442,11 +2704,13 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Safari's floating toolbar sits over the bottom of the page: keep the capture buttons above it.
   if (IOS && !STANDALONE) document.documentElement.style.setProperty('--bar-pad', '64px');
   loadSettings(); updateControls();
+  checkLastSession();
+  idbGet('last').then(rec => { if (rec) { ROOM.saved = Object.assign({}, rec, { blob: undefined }); syncSavedUI(); } }).catch(() => { });
   DE.isCached('fp16').then(a => a || DE.isCached('q8')).then(c => { if (c && !ROOM.engineNote) setText('modelNote', 'The AI depth model is already in this browser.'); }).catch(() => { });
   if (!window.isSecureContext) setMessage('Open this page over HTTPS to use the camera. The demo works anywhere.', 'warn');
   requestAnimationFrame(loop);
   // Test hook (read-only snapshot) for automated checks.
-  window.__echoscope = { state, room: ROOM, setView, roomStart, roomFinish, nextSpot, buildNow, getEngine, loadCapture, saveCapture };
+  window.__echoscope = { state, room: ROOM, setView, roomStart, roomFinish, nextSpot, buildNow, getEngine, loadCapture, saveCapture, logText, cancelBuild, idbGet };
 })();
 </script>
 </body>
