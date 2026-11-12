@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoScope">
 <link rel="icon" href="data:,">
-<title>EchoScope | AI room capture · v3.2</title>
+<title>EchoScope | AI room capture · v3.3</title>
 <style>
 :root{--bg:#06111d;--card:#0b1a2a;--card2:#0e2133;--line:#1d3a4f;--text:#e7f4fb;--muted:#8fb0c4;--accent:#3ce5c5;--accent2:#24c6db;--warn:#f4bd70;--err:#f08991;--bar-pad:12px}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
@@ -109,7 +109,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 </head>
 <body>
 <div class="app">
- <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.2</span></header>
+ <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.3</span></header>
  <div class="banner" id="crashBanner" hidden><b id="crashTitle">The last room build didn’t finish</b><p id="crashText"></p>
   <div class="tools"><button class="btn primary" id="crashRebuildBtn" type="button">Rebuild the saved capture</button><button class="btn" id="crashCopyBtn" type="button">Copy log</button><button class="btn" id="crashLogBtn" type="button">Download log</button><button class="btn" id="crashCapBtn" type="button">Download capture</button><button class="btn ghost" id="crashCloseBtn" type="button">Dismiss</button></div></div>
  <main class="layout">
@@ -1591,7 +1591,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const gpu = prefer === 'cpu' ? null : await gpuInfo();
     if (o.onLog) o.onLog('depth engine: GPU ' + (prefer === 'cpu' ? 'not wanted (CPU only)' : gpu ? 'found' : 'not available'), gpu || undefined);
     if (gpu && (gpu.f16 || prefer === 'gpu')) {
-      plans.push({ ep: 'webgpu', bundle: 'ort.webgpu.bundle.min.mjs', model: gpu.f16 ? 'fp16' : 'fp32', L: 392 });
+      plans.push({ ep: 'webgpu', bundle: 'ort.webgpu.bundle.min.mjs', model: gpu.f16 ? 'fp16' : 'fp32', L: 336 });
       plans.push({ ep: 'wasm', bundle: 'ort.webgpu.bundle.min.mjs', model: 'q8', L: 280 }); // same runtime, already loaded
     }
     plans.push({ ep: 'wasm', bundle: 'ort.wasm.bundle.min.mjs', model: 'q8', L: 280 });
@@ -1625,8 +1625,22 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         log(`depth engine: model ${(bytes.length / 1e6).toFixed(1)} MB ${pre ? '(downloaded while capturing)' : ''} in ${Math.round(now() - t0)} ms`);
         stage = 'session'; t0 = now();
         prog({ stage: 'session', note: plan.ep });
-        const session = await ort.InferenceSession.create(bytes, { executionProviders: [plan.ep], graphOptimizationLevel: 'all' });
+        // logSeverityLevel 3: errors only (ORT's routine "nodes assigned to the CPU" warning is noise)
+        const sessOpts = { executionProviders: [plan.ep], graphOptimizationLevel: 'all', logSeverityLevel: 3 };
+        let session = await ort.InferenceSession.create(bytes, sessOpts);
         prefetched.delete(urls[0]);
+        // On the GPU the session is renewed every few photos: on iPhone the page was killed after about two
+        // dozen GPU inferences while our own data stayed small, i.e. GPU-side memory grows per run. Releasing
+        // the session frees it; the model comes back from Cache Storage.
+        const recycleEvery = plan.ep === 'webgpu' ? (o.recycleEvery ?? 10) : 0, keepBytes = recycleEvery && !(await openCache()) ? bytes : null;
+        let runs = 0, renewals = 0;
+        const renew = async () => {
+          const tr = now();
+          try { await session.release(); } catch (_) { }
+          session = null; await new Promise(r => setTimeout(r, 40));
+          session = await ort.InferenceSession.create(keepBytes || await loadModel(urls, null), sessOpts); renewals++;
+          log(`depth engine: GPU session renewed after ${runs} runs in ${Math.round(now() - tr)} ms`);
+        };
         log(`depth engine: session created in ${Math.round(now() - t0)} ms`, { inputs: session.inputNames, outputs: session.outputNames });
         stage = 'probe'; t0 = now();
         const inName = session.inputNames[0], outName = session.outputNames[0];
@@ -1634,6 +1648,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         const half = meta.type === 'float16';
         let busy = Promise.resolve();
         const run = async (img, outW, outH) => {
+          if (recycleEvery && runs > 1 && (runs - 1) % recycleEvery === 0) await renew(); // the test inference counts as run 1
+          runs++;
           const { iw, ih } = inputSize(img.w, img.h, o.inputLong || plan.L);
           const rgb = resizeRGBA(img.data, img.w, img.h, iw, ih), n = iw * ih;
           const chw = half ? new Uint16Array(3 * n) : new Float32Array(3 * n);
@@ -1646,10 +1662,10 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           return resampleMap(map, ow, oh, outW || ow, outH || oh);
         };
         const engine = {
-          kind: plan.ep, model: plan.model, inputLong: o.inputLong || plan.L, half,
+          kind: plan.ep, model: plan.model, inputLong: o.inputLong || plan.L, half, recycleEvery, get renewals() { return renewals; },
           // Serialised: one inference at a time.
           infer(img, outW, outH) { const p = busy.then(() => run(img, outW, outH)); busy = p.catch(() => { }); return p; },
-          async dispose() { try { await session.release(); } catch (_) { } }
+          async dispose() { try { if (session) await session.release(); } catch (_) { } session = null; }
         };
         // smoke test: a tiny grey image must give a finite map, else fall through to the next plan
         const probe = await engine.infer({ data: new Uint8ClampedArray(56 * 42 * 4).fill(128), w: 42, h: 56 }, 6, 8);
@@ -1672,7 +1688,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 });
 </script>
 <script>
-/* EchoScope v3.2 — room capture with the camera and an on-device AI depth model.
+/* EchoScope v3.3 — room capture with the camera and an on-device AI depth model.
    Capture flow, build pipeline, viewer UI and files. Stitching, viewer and exports live in EchoRoom;
    depth calibration, spot alignment, floor plans and textures in EchoScan; the depth network in EchoDepth. */
 (() => {
@@ -1684,6 +1700,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // side ROOM_FRAME_LONG px; floor photos in ROOM_FLOOR_DIRS of 8 directions; depth maps DEPTH_LONG px long.
   const ROOM_SHOT_DEG = 10, ROOM_SHOT_TILT_DEG = 14, ROOM_FRAME_LONG = 360, ROOM_MAX_FRAMES = 90, ROOM_MAX_SPOTS = 5, ROOM_VIDEO_LAG_MS = 70;
   const ROOM_FLOOR_DIRS = 6, ROOM_CEIL_DIRS = 3, DEPTH_LONG = 128, DEMO_SPEED = 3;
+  // Level photos closer than this in heading share a depth map budget (0 = every photo gets one). Thinning
+  // was tried: at 15° the floor-anchor check loses its close pairs and a hard spot's error grows ~4×.
+  const DEPTH_LEVEL_GAP = 0;
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 
@@ -1720,7 +1739,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Every capture and build step, timing, depth-engine attempt, warning and error is written to
   // localStorage the moment it happens, so the log survives iOS killing the tab (a page that runs out of
   // memory is reloaded) and can be copied, downloaded or shared afterwards. No photos go into the log.
-  const VERSION = 'v3.2', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
+  const VERSION = 'v3.3', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
   const LOG = [];
   const getJSON = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } };
   const setJSON = (key, v) => { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { } };
@@ -2216,7 +2235,17 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       buildStep('build started', { source: R.source, spots: R.spots.map(sp => ({ photos: sp.frames.length, usable: spotUsable(sp) })), camHeightCm: +ui.camHeight.value, fovDeg: +ui.camFov.value, armCm: +ui.armRadius.value, recovery: recover || undefined });
       deviceInfo().then(i => logLine('info', 'device', i)).catch(() => { });
       if (!spots.length) throw Error('no spot has both a full turn and floor photos');
-      const todo = spots.flatMap(sp => sp.frames).filter(f => !f.disp), P = todo.length ? 0.7 : 0;
+      const want = new Set();
+      for (const sp of spots) {
+        let last = null;
+        for (const f of sp.frames) {
+          const fw = frameCam(f).fwd, pitch = f.pitch ?? Math.asin(clamp(fw[1], -1, 1)), yaw = Math.atan2(fw[0], -fw[2]);
+          if (Math.abs(pitch) >= 25 * DEG) { want.add(f); continue; }
+          if (last == null || Math.abs(Math.atan2(Math.sin(yaw - last), Math.cos(yaw - last))) >= DEPTH_LEVEL_GAP) { want.add(f); last = yaw; }
+        }
+      }
+      const todo = spots.flatMap(sp => sp.frames).filter(f => want.has(f) && !f.disp), P = todo.length ? 0.7 : 0;
+      logLine('info', `depth needed for ${todo.length} of ${allFrames().length} photos`);
       if (todo.length && !demo) { setBuildProgress(0, 'saving the capture first'); buildStep('autosave before depth'); await autosave('before depth'); }
       if (todo.length) {
         setBuildProgress(0, demo ? 'synthetic depth (stand-in for the AI)' : 'loading the AI depth model');
@@ -2260,13 +2289,14 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         setBuildProgress(P + (1 - P) * 0.4 * k / spots.length, `calibrating depth · spot ${k + 1}/${spots.length}`);
         buildStep(`calibrating spot ${k + 1}/${spots.length}`, { photos: spots[k].frames.length }); await nextFrame(); checkCancel();
         const tk = performance.now();
-        const frames = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, rgba: f.data, cw: f.w, ch: f.h }; });
+        const framesAll = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, rgba: f.data, cw: f.w, ch: f.h }; });
+        const frames = framesAll.filter(f => f.disp); // calibration and depth points: the photos with depth maps
         const cal = S3.calibrateSpot(frames, camH);
         logLine('info', `spot ${k + 1} calibrated in ${Math.round(performance.now() - tk)} ms`, { floorPhotos: cal.floorPhotos, droppedAnchors: cal.droppedAnchors, rows: cal.rows, floorRows: cal.floorRows });
         if (!cal.floorPhotos) { skipped.push(spots[k].index + 1); logLine('warn', `spot ${k + 1}: no floor found in its downward photos — left out`); continue; }
         const cloud = S3.spotCloud(frames, cal.cal), st = S3.spotStructure(cloud, camH);
         logLine('info', `spot ${k + 1}: ${cloud.n} depth points, ceiling ${st.ceil ? st.ceil.toFixed(2) + ' m' : 'not seen'}`);
-        used.push({ frames, cal, cloud, ceil: st.ceil, prof: st.prof, camHeight: camH, index: spots[k].index, photos: frames.length });
+        used.push({ frames, framesAll, cal, cloud, ceil: st.ceil, prof: st.prof, camHeight: camH, index: spots[k].index, photos: framesAll.length });
       }
       if (!used.length) throw Error('the floor could not be found in the photos aimed down, so the scale is unknown. Tilt further down (about 45°) so most of each floor photo shows floor, in good light');
       setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by their walls' : 'tracing the walls');
@@ -2315,7 +2345,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       for (let k = 0; k < B.spots3.length; k++) {
         if (prog) prog(0.4 * k / B.spots3.length, `stitching photos · spot ${k + 1}/${B.spots3.length}`);
         step(`stitching spot ${k + 1}/${B.spots3.length}`, { panorama: `${PW}x${PW / 2}` }); await nextFrame(); checkCancel();
-        const sp = B.spots3[k], depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.frames, depth, sp.frames[0].fov, PW, PW / 2);
+        const sp = B.spots3[k], depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.framesAll || sp.frames, depth, sp.frames[0].fov, PW, PW / 2);
         B.views.push({ depth, pano: pano.image, coverage: pano.coverage });
       }
     }
