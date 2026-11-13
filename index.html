@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoScope">
 <link rel="icon" href="data:,">
-<title>EchoScope | AI room capture · v3.4</title>
+<title>EchoScope | AI room capture · v3.5</title>
 <style>
 :root{--bg:#06111d;--card:#0b1a2a;--card2:#0e2133;--line:#1d3a4f;--text:#e7f4fb;--muted:#8fb0c4;--accent:#3ce5c5;--accent2:#24c6db;--warn:#f4bd70;--err:#f08991;--bar-pad:12px}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
@@ -109,7 +109,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 </head>
 <body>
 <div class="app">
- <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.4</span></header>
+ <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.5</span></header>
  <div class="banner" id="crashBanner" hidden><b id="crashTitle">The last room build didn’t finish</b><p id="crashText"></p>
   <div class="tools"><button class="btn primary" id="crashRebuildBtn" type="button">Rebuild the saved capture</button><button class="btn" id="crashCopyBtn" type="button">Copy log</button><button class="btn" id="crashLogBtn" type="button">Download log</button><button class="btn" id="crashCapBtn" type="button">Download capture</button><button class="btn ghost" id="crashCloseBtn" type="button">Dismiss</button></div></div>
  <main class="layout">
@@ -155,7 +155,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     <div class="switch"><label for="camMirror">Mirror photos<small>Only if the stitched room looks mirrored</small></label><input class="toggle" type="checkbox" id="camMirror"></div>
    </div></details>
    <details class="box"><summary>AI depth model</summary><div class="inner">
-    <div class="field"><label for="depthEngine">Runs on this device</label><select id="depthEngine"><option value="auto" selected>Auto — GPU if suitable (~50 MB), else CPU (~27 MB)</option><option value="cpu">CPU only (~27 MB, slower)</option><option value="gpu">GPU, full precision (~99 MB)</option></select></div>
+    <div class="field"><label for="depthEngine">Runs on this device</label><select id="depthEngine"><option value="auto" selected>Auto — CPU on iPhone/iPad, else GPU if suitable</option><option value="cpu">CPU only (~27 MB, slower, reliable)</option><option value="gpu">GPU (~50 MB, faster; on iPhone it can run out of memory)</option></select></div>
     <button class="btn" id="modelBtn" type="button">Get the AI depth model now (Wi-Fi recommended)</button>
     <div class="note" id="modelNote">Depth Anything V2 (small) is downloaded once on first use and kept by this browser. Photos never leave the phone.</div>
    </div></details>
@@ -2119,8 +2119,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 
   // --- the engine
   // o.prefer: 'auto' | 'gpu' | 'cpu'; o.onProgress({stage, loaded, total, cached, note}); o.ortBase / o.modelBase: overrides (tests, mirrors)
+  // iPhone and iPad: on the GPU the page was killed after about 20 photos twice (with and without
+  // renewing the device); the CPU engine ran a whole build at ~0.5 s a photo. Auto means CPU there.
+  const isIOS = () => typeof navigator !== 'undefined' && (/iPhone|iPad|iPod/.test(navigator.userAgent || '') || (/Macintosh/.test(navigator.userAgent || '') && navigator.maxTouchPoints > 1));
   async function plansFor(o = {}) {
-    const prefer = o.prefer || 'auto', plans = [];
+    let prefer = o.prefer || 'auto'; const plans = [];
+    if (prefer === 'auto' && isIOS() && !o.allowIOSGpu) { prefer = 'cpu'; if (o.onLog) o.onLog('depth engine: GPU skipped on iPhone/iPad (it ran out of memory there); the CPU is slower but finishes'); }
     const gpu = prefer === 'cpu' ? null : await gpuInfo();
     if (o.onLog) o.onLog('depth engine: GPU ' + (prefer === 'cpu' ? 'not wanted (CPU only)' : gpu ? 'found' : 'not available'), gpu || undefined);
     if (gpu && (gpu.f16 || prefer === 'gpu')) {
@@ -2290,7 +2294,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Every capture and build step, timing, depth-engine attempt, warning and error is written to
   // localStorage the moment it happens, so the log survives iOS killing the tab (a page that runs out of
   // memory is reloaded) and can be copied, downloaded or shared afterwards. No photos go into the log.
-  const VERSION = 'v3.4', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
+  const VERSION = 'v3.5', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
   const LOG = [];
   const getJSON = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } };
   const setJSON = (key, v) => { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { } };
@@ -2489,6 +2493,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     R.grabCtx.drawImage(v, 0, 0, w, h);
     const q = quatAt(performance.now() - ROOM_VIDEO_LAG_MS);
     const fr = { data: R.grabCtx.getImageData(0, 0, w, h).data, w, h, q, theta: autoFrameAngle(vw, vh, q), heading: state.zeroHeading || 0, camKind: 'back', t: Date.now() };
+    // Between steps a photo lives as JPEG only (its pixels come back on demand): 300 photos as raw pixels
+    // were ~120 MB, a good part of what iOS allows a page
+    try { R.grab.toBlob(b => { if (b) { fr.jpegBlob = b; fr.data = null; } }, 'image/jpeg', 0.92); } catch (_) { }
     // the same video frame, sharper, for the textures (encoded in the background)
     const kh = Math.min(1, ROOM_HI_LONG / Math.max(vw, vh)), hw = Math.round(vw * kh), hh = Math.round(vh * kh);
     if (hw > w * 1.2 && R.grabHi !== false) {
@@ -2554,10 +2561,13 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     // floor photos at about 45°: they must also show where the floor meets the walls (that is what ties
     // the depth of the level photos to the phone height); straight down at your feet they show neither
     const tooSteep = pitch < -64 * DEG;
-    if (sp.frames.length < ROOM_MAX_FRAMES && steady && !tooSteep && (since > gap || (since > 3 * DEG && t - R.shotAt > 2500))) {
+    // a direction this spot already has a photo of (turning past the full circle, sweeping back through
+    // level on the way up) needs no second one
+    const dup = sp.frames.some(g => g.fwd && angleBetween(fwd, g.fwd) < (tilt ? 8 : 6) * DEG);
+    if (sp.frames.length < ROOM_MAX_FRAMES && steady && !tooSteep && !dup && (since > gap || (since > 3 * DEG && t - R.shotAt > 2500))) {
       const f = demo ? demoFrame() : grabFrame();
       if (f) {
-        f.spot = sp.index; f.pitch = pitch; sp.frames.push(f);
+        f.spot = sp.index; f.pitch = pitch; f.fwd = fwd; sp.frames.push(f);
         if (sp.frames.length % 10 === 0) logLine('info', `spot ${sp.index + 1}: ${sp.frames.length} photos (step ${R.step || 'turn'})`, undefined, false);
         R.pano.add({ data: f.data, w: f.w, h: f.h, cam: frameCam(f) }, f.fov || camFov());
         R.lastShot = fwd; R.shotAt = t; R.previewDirty = true; cue('tick'); drawCamPreview(f);
@@ -2599,6 +2609,21 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     ui.nextSpotBtn.classList.toggle('dim', !(sp && spotUsable(sp)) || R.spots.length >= ROOM_MAX_SPOTS); ui.nextSpotBtn.classList.toggle('ready', !!ready && R.spots.length < ROOM_MAX_SPOTS);
     ui.buildBtn.classList.toggle('dim', !canBuild);
   }
+  // A photo's pixels at its frame size, decoded from its JPEG when they are not in memory.
+  const fpx = { c: null, x: null };
+  const hasJpeg = f => !!(f.jpegBlob || f.jpeg || f.hiBlob || f.hiJpeg);
+  async function framePixels(f) {
+    if (f.data) return f.data;
+    const src = f.jpegBlob || (f.jpeg && new Blob([f.jpeg], { type: 'image/jpeg' })) || f.hiBlob || (f.hiJpeg && new Blob([f.hiJpeg], { type: 'image/jpeg' }));
+    if (!src) throw Error('a photo has no pixels');
+    const bmp = await createImageBitmap(src);
+    if (!fpx.c) { fpx.c = document.createElement('canvas'); fpx.x = fpx.c.getContext('2d', { willReadFrequently: true }); }
+    if (fpx.c.width !== f.w || fpx.c.height !== f.h) { fpx.c.width = f.w; fpx.c.height = f.h; }
+    fpx.x.drawImage(bmp, 0, 0, f.w, f.h); if (bmp.close) bmp.close();
+    return fpx.x.getImageData(0, 0, f.w, f.h).data;
+  }
+  async function loadPixels(frames) { for (const f of frames) if (!f.data) f.data = await framePixels(f); }
+  function dropPixels(frames) { for (const f of frames) if (hasJpeg(f)) f.data = null; }
   function drawCamPreview(f) {
     const c = ui.camPreview; if (c.width !== f.w || c.height !== f.h) { c.width = f.w; c.height = f.h; }
     const img = new ImageData(new Uint8ClampedArray(f.data), f.w, f.h);
@@ -2770,7 +2795,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
   function memMB() {
     const R = ROOM; let b = 0;
-    for (const f of allFrames()) b += (f.data ? f.data.byteLength : 0) + (f.disp ? f.disp.byteLength : 0) + (f.jpeg ? f.jpeg.byteLength : 0) + (f.hiJpeg ? f.hiJpeg.byteLength : f.hiBlob ? f.hiBlob.size : 0);
+    for (const f of allFrames()) b += (f.data ? f.data.byteLength : 0) + (f.disp ? f.disp.byteLength : 0) + (f.jpeg ? f.jpeg.byteLength : f.jpegBlob ? f.jpegBlob.size : 0) + (f.hiJpeg ? f.hiJpeg.byteLength : f.hiBlob ? f.hiBlob.size : 0);
     const B = R.build; if (B) { for (const sp of B.spots3) if (sp.cloud) b += sp.cloud.pos.byteLength + sp.cloud.col.byteLength; if (B.views) for (const v of B.views) if (v.pano) b += v.pano.data.byteLength; }
     const o = { ourDataMB: Math.round(b / 1e6) }, w = DE.wasmHeapMB ? DE.wasmHeapMB() : 0;
     if (w) o.wasmMB = w; // the depth runtime's heap (it only grows)
@@ -2838,7 +2863,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           setBuildProgress(P * i / todo.length, `${demo ? 'synthetic' : 'AI'} depth ${i + 1}/${todo.length} photos${eta}`);
           if (i === 0 || i % 10 === 0) setBuildState({ state: 'running', step: `depth map ${i + 1}/${todo.length}`, source: R.source, engine: R.engineUsed, frames: allFrames().length, mem: memMB() });
           await nextFrame();
-          f.disp = await Promise.race([eng.infer({ data: f.data, w: f.w, h: f.h, frame: f }, dw, dh), cancelled]); f.dw = dw; f.dh = dh;
+          const px = f.data || await framePixels(f);
+          f.disp = await Promise.race([eng.infer({ data: px, w: f.w, h: f.h, frame: f }, dw, dh), cancelled]); f.dw = dw; f.dh = dh;
           if (i < 3 || (i + 1) % 10 === 0 || i === todo.length - 1) logLine('info', `depth map ${i + 1}/${todo.length}: ${Math.round(performance.now() - ti)} ms`, i >= 3 ? memMB() : undefined, i < 3);
         }
         logLine('info', `depth maps done: ${todo.length} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
@@ -2855,11 +2881,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         setBuildProgress(P + (1 - P) * 0.4 * k / spots.length, `calibrating depth · spot ${k + 1}/${spots.length}`);
         buildStep(`calibrating spot ${k + 1}/${spots.length}`, { photos: spots[k].frames.length }); await nextFrame(); checkCancel();
         const tk = performance.now();
-        const framesAll = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, rgba: f.data, cw: f.w, ch: f.h, src: f }; });
+        await loadPixels(spots[k].frames); // this spot's pixels, for the colours; dropped again below
+        const framesAll = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, get rgba() { return f.data; }, cw: f.w, ch: f.h, src: f }; });
         const frames = framesAll.filter(f => f.disp); // calibration and depth points: the photos with depth maps
         const cal = S3.calibrateSpot(frames, camH);
         logLine('info', `spot ${k + 1} calibrated in ${Math.round(performance.now() - tk)} ms`, { floorPhotos: cal.floorPhotos, droppedAnchors: cal.droppedAnchors, rows: cal.rows, floorRows: cal.floorRows });
-        if (!cal.floorPhotos) { skipped.push(spots[k].index + 1); logLine('warn', `spot ${k + 1}: no floor found in its downward photos — left out`); continue; }
+        if (!cal.floorPhotos) { dropPixels(spots[k].frames); skipped.push(spots[k].index + 1); logLine('warn', `spot ${k + 1}: no floor found in its downward photos — left out`); continue; }
         const cloud = S3.spotCloud(frames, cal.cal), st = S3.spotStructure(cloud, camH);
         // walls and ceiling from where floor, walls and ceiling meet (exact angles + phone height); the
         // depth-only structure fills directions where no such line was seen
@@ -2868,6 +2895,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         // the wall lines decide where they were seen in enough directions; otherwise the depth profile stays
         const good = lay.seen >= 0.4;
         used.push({ frames, framesAll, cal, cloud, ceil: lay.ceil || st.ceil, prof: good ? lay.prof : st.prof, sightings: good ? lay.sightings : null, fulls: lay.fulls, fallbackProf: st.prof, floor, camHeight: camH, index: spots[k].index, photos: framesAll.length });
+        dropPixels(spots[k].frames);
       }
       if (!used.length) throw Error('the floor could not be found in the photos aimed down, so the scale is unknown. Tilt further down (about 45°) so most of each floor photo shows floor, in good light');
       setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by the floor they share' : 'tracing the walls');
@@ -2905,20 +2933,21 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // at a time), else the small frame.
   const pix = { c: null, x: null };
   async function photoPixels(p) {
-    const f = p.src, blob = f && !ROOM.lowMem ? f.hiBlob || (f.hiJpeg && new Blob([f.hiJpeg], { type: 'image/jpeg' })) : null;
+    const f = p.src;
+    if (!f) return { data: p.rgba, w: p.cw, h: p.ch };
+    if (f.data && ROOM.lowMem) return { data: f.data, w: p.cw, h: p.ch };
+    // one decode of the best JPEG the photo has: full size when it is sharper than the frame
+    const blob = (!ROOM.lowMem && (f.hiBlob || (f.hiJpeg && new Blob([f.hiJpeg], { type: 'image/jpeg' })))) || f.jpegBlob || (f.jpeg && new Blob([f.jpeg], { type: 'image/jpeg' }));
     if (blob && typeof createImageBitmap === 'function') {
       try {
-        const bmp = await createImageBitmap(blob), w = bmp.width, h = bmp.height;
-        if (w > p.cw && Math.abs(w / h - p.cw / p.ch) < 0.02) {
-          if (!pix.c) { pix.c = document.createElement('canvas'); pix.x = pix.c.getContext('2d', { willReadFrequently: true }); }
-          if (pix.c.width !== w || pix.c.height !== h) { pix.c.width = w; pix.c.height = h; }
-          pix.x.drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
-          return { data: pix.x.getImageData(0, 0, w, h).data, w, h };
-        }
-        if (bmp.close) bmp.close();
-      } catch (e) { console.warn('sharp photo unreadable', e); }
+        const bmp = await createImageBitmap(blob), big = bmp.width > p.cw && Math.abs(bmp.width / bmp.height - p.cw / p.ch) < 0.02, w = big ? bmp.width : p.cw, h = big ? bmp.height : p.ch;
+        if (!pix.c) { pix.c = document.createElement('canvas'); pix.x = pix.c.getContext('2d', { willReadFrequently: true }); }
+        if (pix.c.width !== w || pix.c.height !== h) { pix.c.width = w; pix.c.height = h; }
+        pix.x.drawImage(bmp, 0, 0, w, h); if (bmp.close) bmp.close();
+        return { data: pix.x.getImageData(0, 0, w, h).data, w, h };
+      } catch (e) { console.warn('photo unreadable', e); }
     }
-    return { data: p.rgba, w: p.cw, h: p.ch };
+    return { data: f.data || await framePixels(f), w: p.cw, h: p.ch };
   }
   // Floor plan, textures and model from the calibrated spots (re-run by "straight walls" and the ceiling).
   async function finishModel(prog, logSteps = false) {
@@ -2935,14 +2964,17 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       for (let k = 0; k < B.spots3.length; k++) {
         if (prog) prog(0.3 * k / B.spots3.length, `stitching photos · spot ${k + 1}/${B.spots3.length}`);
         step(`stitching spot ${k + 1}/${B.spots3.length}`, { panorama: `${PW}x${PW / 2}` }); await nextFrame(); checkCancel();
-        const sp = B.spots3[k], depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.framesAll || sp.frames, depth, sp.frames[0].fov, PW, PW / 2);
+        const sp = B.spots3[k], own = (sp.framesAll || sp.frames).map(f => f.src).filter(Boolean);
+        await loadPixels(own);
+        const depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.framesAll || sp.frames, depth, sp.frames[0].fov, PW, PW / 2);
+        dropPixels(own);
         B.views.push({ depth, pano: pano.image, coverage: pano.coverage, gains: pano.gains });
       }
     }
     // textures straight from the photos: each texel from the photo that sees it best (sharp copies when
     // the capture has them)
     const faces = S3.roomFaces(base), photos = [];
-    B.spots3.forEach((sp, k) => sp.frames.forEach((f, i) => photos.push({ spot: k, cam: f.cam, pos: f.pos, fov: f.fov, disp: f.disp, dw: f.dw, dh: f.dh, cal: sp.cal.cal[i], rgba: f.rgba, cw: f.cw, ch: f.ch, src: f.src, gain: (B.views[k].gains && B.views[k].gains.get(f)) || 1 })));
+    B.spots3.forEach((sp, k) => sp.frames.forEach((f, i) => photos.push({ spot: k, cam: f.cam, pos: f.pos, fov: f.fov, disp: f.disp, dw: f.dw, dh: f.dh, cal: sp.cal.cal[i], get rgba() { return f.rgba; }, cw: f.cw, ch: f.ch, src: f.src, gain: (B.views[k].gains && B.views[k].gains.get(f)) || 1 })));
     const srcs = [], tp0 = performance.now();
     for (let i = 0; i < faces.length; i++) {
       if (prog) prog(0.3 + 0.35 * i / faces.length, `texturing ${faces[i].kind === 'wall' ? 'walls' : faces[i].kind} · ${i + 1}/${faces.length}`);
@@ -3116,8 +3148,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     let i = 0;
     for (const sp of R.spots) for (const f of sp.frames) {
       const id = String(i++).padStart(3, '0'), name = `frames/${id}.jpg`;
-      if (f.hiBlob && !f.hiJpeg) f.hiJpeg = new Uint8Array(await f.hiBlob.arrayBuffer());
-      if (!f.hiJpeg && !f.jpeg) f.jpeg = new Uint8Array(await (await rgbaToPng(f, 'image/jpeg', 0.9)).arrayBuffer()); // encoded once, reused
+      if (f.hiBlob && !f.hiJpeg) { f.hiJpeg = new Uint8Array(await f.hiBlob.arrayBuffer()); f.hiBlob = null; } // one copy is enough
+      if (f.jpegBlob && !f.jpeg) { f.jpeg = new Uint8Array(await f.jpegBlob.arrayBuffer()); f.jpegBlob = null; }
+      if (!f.hiJpeg && !f.jpeg) f.jpeg = new Uint8Array(await (await rgbaToPng({ data: f.data || await framePixels(f), w: f.w, h: f.h }, 'image/jpeg', 0.9)).arrayBuffer()); // encoded once, reused
       files.push({ name, data: f.hiJpeg || f.jpeg }); // the sharp copy when there is one: readers scale it to w × h
       const fm = { file: name, w: f.w, h: f.h, sharp: !!f.hiJpeg, spot: sp.index, pitch: f.pitch ?? null, q: f.q || null, theta: f.theta ?? null, heading: f.heading ?? null, camKind: f.camKind || 'back', cam: f.cam || null, pos: f.pos || null, fov: f.fov || null };
       if (f.disp) { const dn = `depth/${id}.f32`; files.push({ name: dn, data: new Uint8Array(f.disp.buffer, f.disp.byteOffset, f.disp.byteLength) }); fm.depth = { file: dn, w: f.dw, h: f.dh }; }
@@ -3209,14 +3242,11 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       ui.camMirror.checked = !!st.camMirror;
       updateControls();
       const spots = [], mk = i => spots[i] || (spots[i] = { index: i, frames: [], bins: new Uint8Array(36), floorBins: new Uint8Array(8), ceilBins: new Uint8Array(8), done: true });
-      const c = document.createElement('canvas'), cx = c.getContext('2d', { willReadFrequently: true });
       for (const fm of meta.frames || []) {
         const bytes = z[fm.file]; if (!bytes) continue;
-        const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' })), sharp = bmp.width > fm.w * 1.2;
-        if (c.width !== fm.w || c.height !== fm.h) { c.width = fm.w; c.height = fm.h; }
-        cx.drawImage(bmp, 0, 0, fm.w, fm.h); if (bmp.close) bmp.close();
-        const f = { data: cx.getImageData(0, 0, fm.w, fm.h).data, w: fm.w, h: fm.h, q: fm.q, theta: fm.theta, heading: fm.heading, camKind: fm.camKind || (v1 ? 'selfie' : 'back') };
-        if (sharp) f.hiJpeg = bytes; else f.jpeg = bytes;
+        // pixels stay in the JPEG until a step needs them
+        const f = { w: fm.w, h: fm.h, q: fm.q, theta: fm.theta, heading: fm.heading, camKind: fm.camKind || (v1 ? 'selfie' : 'back') };
+        if (fm.sharp) f.hiJpeg = bytes; else f.jpeg = bytes;
         if (fm.cam) f.cam = fm.cam; if (fm.pos) f.pos = fm.pos; if (fm.fov) f.fov = fm.fov;
         if (fm.depth && z[fm.depth.file]) { const raw = z[fm.depth.file]; f.disp = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); f.dw = fm.depth.w; f.dh = fm.depth.h; }
         const fw = frameCam(f).fwd, pitch = fm.pitch ?? Math.asin(clamp(fw[1], -1, 1)), yaw = Math.atan2(fw[0], -fw[2]);

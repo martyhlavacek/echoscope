@@ -21,7 +21,7 @@ Next spot and Build room stay on screen the whole time:
 - Tapping **Next spot** before a spot is finished (full turn + floor) explains what's missing; a second tap skips that spot.
 - **✕** cancels the capture but keeps the photos, which can then be rebuilt or saved under Capture files.
 
-The first build downloads the AI depth model once: about 50 MB when the phone's GPU can run it, or 27 MB for the slower CPU version. The download starts while you capture, and the browser keeps it afterwards. **AI depth model → Get the AI depth model now** fetches it ahead of time (Wi-Fi recommended).
+The first build downloads the AI depth model once: 27 MB for the CPU version, which iPhone and iPad use (about 0.5 s a photo), or about 50 MB for the GPU version elsewhere. The download starts while you capture, and the browser keeps it afterwards. **AI depth model → Get the AI depth model now** fetches it ahead of time (Wi-Fi recommended).
 
 Tip: on iPhone, **Share → Add to Home Screen** runs EchoScope full screen without Safari's toolbars.
 
@@ -52,7 +52,7 @@ Tip: on iPhone, **Share → Add to Home Screen** runs EchoScope full screen with
   - **Download capture**.
 - **Lighter settings for the next build.** If the last build crashed while the GPU was computing depth, the next build uses the CPU instead (at full quality otherwise). If it crashed in a later step, the next one uses settings that need less memory.
 - **Cancel build.** During a build, **Copy log** and **Cancel build** stay on screen. A step that takes unusually long is noted in the log.
-- **GPU memory.** The first iPhone log showed the GPU depth engine growing in memory with every photo until iOS killed the page (after about two dozen photos). Since v3.3, the depth engine runs on a GPU device of its own and replaces the device and its session every 8 photos, which frees everything the GPU side holds; it also works on slightly smaller images, and the log records the engine's memory every 10 photos. The automatic switch to the CPU after a crash stays as the safety net.
+- **Memory on iPhone.** Twice, iOS killed the page after about 20 photos while the GPU computed depth — once with and once without the v3.3 measure of replacing the GPU device every 8 photos. Since v3.5, *Auto* uses the CPU depth engine on iPhone and iPad, which has finished every build (about 0.5 s a photo); the GPU can still be chosen under AI depth model. Photos are also kept as JPEG between build steps and decoded only while a step needs them (300 photos took about 120 MB as raw pixels), and a spot no longer takes a second photo of a direction it already has (turning past the full circle, sweeping back through level on the way up). The automatic switch to the CPU after a crash stays as the safety net.
 
 ## How it works
 - **Depth per photo.** [Depth Anything V2 Small](https://huggingface.co/onnx-community/depth-anything-v2-small) (Apache-2.0) runs in the page through [onnxruntime-web](https://onnxruntime.ai) on WebGPU (half precision), or WebAssembly (8-bit) when the GPU can't run it. For each photo it gives relative depth: which things are nearer and farther, but not by how much in metres. That unknown scale and offset is different for every photo.
