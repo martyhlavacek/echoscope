@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoScope">
 <link rel="icon" href="data:,">
-<title>EchoScope | AI room capture · v3.3</title>
+<title>EchoScope | AI room capture · v3.4</title>
 <style>
 :root{--bg:#06111d;--card:#0b1a2a;--card2:#0e2133;--line:#1d3a4f;--text:#e7f4fb;--muted:#8fb0c4;--accent:#3ce5c5;--accent2:#24c6db;--warn:#f4bd70;--err:#f08991;--bar-pad:12px}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
@@ -109,7 +109,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 </head>
 <body>
 <div class="app">
- <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.3</span></header>
+ <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.4</span></header>
  <div class="banner" id="crashBanner" hidden><b id="crashTitle">The last room build didn’t finish</b><p id="crashText"></p>
   <div class="tools"><button class="btn primary" id="crashRebuildBtn" type="button">Rebuild the saved capture</button><button class="btn" id="crashCopyBtn" type="button">Copy log</button><button class="btn" id="crashLogBtn" type="button">Download log</button><button class="btn" id="crashCapBtn" type="button">Download capture</button><button class="btn ghost" id="crashCloseBtn" type="button">Dismiss</button></div></div>
  <main class="layout">
@@ -146,7 +146,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   </section>
   <aside class="card pad stack" id="settings">
    <h2>Capture settings</h2>
-   <details class="box" open><summary>How to capture</summary><div class="inner"><ol class="steps"><li>Hold the phone in front of you, upright, <b>screen facing you</b>.</li><li>Tap Start, hold still, then <b>turn slowly on the spot</b> through a full circle. Each tick is a photo.</li><li>At the chime <b>tilt down to the floor and turn around again</b>, then <b>look up at the ceiling</b> in a few directions.</li><li><b>Walk 2–3 m</b>, tap <b>Next spot</b> and repeat (2–3 spots for most rooms), then tap <b>Build room</b>.</li></ol></div></details>
+   <details class="box" open><summary>How to capture</summary><div class="inner"><ol class="steps"><li>Hold the phone in front of you, upright, <b>screen facing you</b>.</li><li>Tap Start, hold still, then <b>turn slowly on the spot</b> through a full circle. Each tick is a photo.</li><li>At the chime <b>tilt down about 45°</b> (the floor should reach the top half of the screen — not straight down at your feet) <b>and turn around again</b>, then <b>look up at the ceiling</b> in a few directions.</li><li><b>Walk 2–3 m</b>, tap <b>Next spot</b> and repeat (2–3 spots for most rooms), then tap <b>Build room</b>.</li><li>Pick spots with <b>open floor around you</b> — a metre or more from counters and furniture — and keep people out of the photos.</li></ol></div></details>
    <div class="switch"><label for="voice">Spoken prompts<small>Ticks and chimes play either way</small></label><input class="toggle" type="checkbox" id="voice" checked></div>
    <details class="box"><summary>Camera</summary><div class="inner">
     <div class="field"><div class="head"><label for="camFov">Field of view</label><output id="camFovVal">68°</output></div><input type="range" min="40" max="100" step="1" value="68" id="camFov"><small>Across the long side of a photo (iPhone main camera ≈ 68°). Adjust if the stitched panorama shows doubled edges.</small></div>
@@ -850,9 +850,49 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     for (let r = n - 1; r >= 0; r--) { let s = b[r]; for (let k = r + 1; k < n; k++) s -= A[r * n + k] * x[k]; x[r] = Math.abs(A[r * n + r]) > 1e-14 ? s / A[r * n + r] : 0; }
     return x;
   }
+  // A first depth for every photo from parallax. Turning on the spot, the phone travels on a circle
+  // (o.arm, in frame.pos), so neighbouring photos see near things shifted against far ones: the (a, b) whose
+  // depths line up the neighbours' colours best (normalised cross-correlation over textured samples) is
+  // that photo's depth, independent of everything else. → [{a, b, w (confidence 0–1)}]
+  function parallaxInit(frames, norm, o = {}) {
+    const lumAt = (f, x, y) => { x = clamp(x, 0, f.cw - 1.001); y = clamp(y, 0, f.ch - 1.001); const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, W = f.cw, d = f.rgba, L = q => 0.3 * d[q] + 0.59 * d[q + 1] + 0.11 * d[q + 2], q = (y0 * W + x0) * 4; return (L(q) * (1 - fx) + L(q + 4) * fx) * (1 - fy) + (L(q + W * 4) * (1 - fx) + L(q + W * 4 + 4) * fx) * fy; };
+    const step = o.step || 6;
+    return frames.map((fi, i) => {
+      if (!fi.rgba || !fi.disp) return null;
+      const nb = [i - 1, i + 1, i - 2, i + 2].filter(j => j >= 0 && j < frames.length && frames[j].rgba && Math.abs(Math.asin(clamp(frames[j].cam.fwd[1], -1, 1)) - Math.asin(clamp(fi.cam.fwd[1], -1, 1))) < 20 * DEG && dot(frames[j].cam.fwd, fi.cam.fwd) > Math.cos(35 * DEG)).slice(0, o.neighbours || 3);
+      if (!nb.length) return null;
+      const S = [];
+      for (let y = step; y < fi.ch - step; y += step) for (let x = step; x < fi.cw - step; x += step) {
+        const g = Math.abs(lumAt(fi, x + 1, y) - lumAt(fi, x - 1, y)) + Math.abs(lumAt(fi, x, y + 1) - lumAt(fi, x, y - 1)); if (g < 6) continue; // flat patches carry no parallax
+        const r = RM.camRay(fi.cam, fi.cw, fi.ch, fi.fov, x, y), p = (bilin(fi.disp, fi.dw, fi.dh, (x + 0.5) / fi.cw * fi.dw - 0.5, (y + 0.5) / fi.ch * fi.dh - 0.5) - norm[i].lo) * norm[i].sc;
+        S.push({ r, p, cf: dot(r, fi.cam.fwd), c: lumAt(fi, x, y) });
+      }
+      if (S.length < 120) return null;
+      const ncc = (fj, a, b) => {
+        let sa = 0, sb = 0, sab = 0, saa = 0, sbb = 0, n = 0;
+        for (const s of S) {
+          const q = (a * s.p + b) * s.cf; if (!(q > 1 / 15)) continue; const t = 1 / q;
+          const pr = RM.camProject(fj.cam, fj.cw, fj.ch, fj.fov, [fi.pos[0] + t * s.r[0] - fj.pos[0], fi.pos[1] + t * s.r[1] - fj.pos[1], fi.pos[2] + t * s.r[2] - fj.pos[2]]);
+          if (!pr || pr[0] < 1 || pr[1] < 1 || pr[0] > fj.cw - 2 || pr[1] > fj.ch - 2) continue;
+          const A = s.c, B = lumAt(fj, pr[0], pr[1]); sa += A; sb += B; sab += A * B; saa += A * A; sbb += B * B; n++;
+        }
+        return n < 60 ? 0 : Math.max(0, (sab / n - sa / n * sb / n) / Math.sqrt(Math.max(1e-9, (saa / n - (sa / n) ** 2) * (sbb / n - (sb / n) ** 2))));
+      };
+      const tot = (a, b) => { let v = 0; for (const j of nb) v += ncc(frames[j], a, b); return v / nb.length; };
+      let best = { s: -1 };
+      for (let u = 0; u < 10; u++) for (let v = 0; v < 10; v++) { // inverse distances at the far (p = 0) and near (p = 1) ends
+        const qFar = 1 / (8 * Math.pow(0.5 / 8, u / 9)), qNear = qFar * 1.1 * Math.pow(12, v / 9); if (qNear > 4) continue;
+        const sc = tot(qNear - qFar, qFar); if (sc > best.s) best = { s: sc, a: qNear - qFar, b: qFar };
+      }
+      for (let it = 0; it < 2; it++) for (const da of [0.8, 0.9, 1, 1.12, 1.25]) for (const db of [0.8, 0.9, 1, 1.12, 1.25]) { const a = best.a * da, b = best.b * db, sc = tot(a, b); if (sc > best.s) best = { s: sc, a, b }; }
+      const flat = tot(1e-4, best.b + 0.5 * best.a), gain = best.s - flat;
+      return { a: best.a, b: best.b, w: clamp((gain - 0.02) / 0.1, 0, 1) * clamp((best.s - 0.45) / 0.3, 0, 1), ncc: best.s, flat };
+    });
+  }
   function calibrateSpot(frames, camHeight, o = {}) {
     const N = frames.length, GX = o.gx || 14, GY = o.gy || 18, FX = GX * 2, FY = GY * 2;
     const norm = frames.map(f => { const lo = percentile(f.disp, 0.02), hi = percentile(f.disp, 0.98); return { lo, sc: 1 / Math.max(1e-6, hi - lo) }; });
+    if (!o.init && o.parallaxInit && frames.every(f => f.rgba)) o = Object.assign({}, o, { init: parallaxInit(frames, norm, o) });
     const P = (i, px, py) => { const f = frames[i]; return (bilin(f.disp, f.dw, f.dh, px, py) - norm[i].lo) * norm[i].sc; };
     // Floor rows, found per photo by RANSAC: the scale/offset under which the most samples sit on a plane
     // camHeight below the camera while few sit BELOW it. The floor is the lowest surface, which tells it
@@ -948,7 +988,14 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       }
       return rows;
     };
-    const n = 2 * N, typeW = [1, o.overlapWeight ?? 1.5];
+    const n = 2 * N, typeW = [1, o.overlapWeight ?? 1.5, o.initWeight ?? 4];
+    // o.init[i] = {a, b, w}: a starting depth for photo i (from the parallax between neighbours): its
+    // overlaps are matched through that depth from the start, and a soft pull towards it keeps a photo
+    // whose links are weak from collapsing into "everything equally far"
+    const init = o.init && o.init.length === N ? o.init.map(v => v && v.a > 0 && v.b > 0 ? v : null) : null;
+    const priorRows = [];
+    if (init) init.forEach((v, i) => { if (!v || !(v.w > 0)) return; const pm = 0.5, q0 = v.a * pm + v.b, q1 = v.a + v.b; priorRows.push({ i, ci: [pm / q0, 1 / q0], rhs: 1, type: 2, pw: v.w }, { i, ci: [1 / q1, 1 / q1], rhs: 1, type: 2, pw: v.w }); });
+    const x0 = init ? (() => { const x = new Float64Array(n); for (let i = 0; i < N; i++) { x[2 * i] = init[i] ? init[i].a : 0.5; x[2 * i + 1] = init[i] ? init[i].b : 0.4; } return x; })() : null;
     let rows = [], wt = null;
     const build = (useFloor, fixA) => {
       const M = new Float64Array(n * n), v = new Float64Array(n);
@@ -957,8 +1004,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         if (ib < 0) return;
         for (let p = 0; p < 2; p++) { v[ib + p] += w * cb[p] * rhs; for (let q = 0; q < 2; q++) { M[(ib + p) * n + ib + q] += w * cb[p] * cb[q]; M[(ia + p) * n + ib + q] += w * ca[p] * cb[q]; M[(ib + p) * n + ia + q] += w * cb[p] * ca[q]; } }
       };
-      rows.forEach((r, k) => { if (wt[k] > 0 && (useFloor || r.type)) add(2 * r.i, r.ci, r.type ? 2 * r.j : -1, r.cj, r.rhs, wt[k] * typeW[r.type] * (r.pw || 1)); });
+      rows.forEach((r, k) => { if (wt[k] > 0 && (useFloor || r.type)) add(2 * r.i, r.ci, r.type === 1 ? 2 * r.j : -1, r.cj, r.rhs, wt[k] * typeW[r.type] * (r.pw || 1)); });
       for (let k = 0; k < n; k++) M[k * n + k] += 1e-6; // keeps photos without overlaps finite
+      // optional shape prior: the near end of a photo's depth range (p = 1) about o.shapeK times the far end's
+      // inverse depth (p = 0), i.e. a ≈ (K − 1)·b — weak, so data overrules it; it stops a weakly linked photo
+      // from flattening into one distance for everything
+      if (o.shapeW) for (let i = 0; i < N; i++) { const K1 = (o.shapeK ?? 3) - 1, w = o.shapeW, ia = 2 * i, ib = ia + 1; M[ia * n + ia] += w; M[ib * n + ib] += w * K1 * K1; M[ia * n + ib] -= w * K1; M[ib * n + ia] -= w * K1; }
       if (fixA != null) { // gauge: overlaps alone fix everything up to one common scale; pin a_ref = 1
         for (let k = 0; k < n; k++) if (k !== fixA) { v[k] -= M[k * n + fixA]; M[k * n + fixA] = 0; }
         for (let k = 0; k < n; k++) M[fixA * n + k] = 0;
@@ -967,7 +1018,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       return solveLinear(M, v, n);
     };
     const reweight = (x, types) => {
-      const res = rows.map(r => { let e = r.ci[0] * x[2 * r.i] + r.ci[1] * x[2 * r.i + 1] - r.rhs; if (r.type) e += r.cj[0] * x[2 * r.j] + r.cj[1] * x[2 * r.j + 1]; return e; });
+      const res = rows.map(r => { let e = r.ci[0] * x[2 * r.i] + r.ci[1] * x[2 * r.i + 1] - r.rhs; if (r.type === 1) e += r.cj[0] * x[2 * r.j] + r.cj[1] * x[2 * r.j + 1]; return e; });
       for (const T of types) {
         const ab = []; rows.forEach((r, k) => { if (r.type === T) ab.push(Math.abs(res[k])); });
         const sig = Math.max(1e-6, 1.4826 * percentile(ab, 0.5));
@@ -994,7 +1045,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       return e.length ? percentile(e, 0.5) : Infinity;
     };
     // First solve over all overlapping pairs, before any depth exists to correct parallax with.
-    rows = floorRows.concat(overlapRows(null)); wt = new Float64Array(rows.length).fill(1);
+    rows = floorRows.concat(overlapRows(x0), priorRows); wt = new Float64Array(rows.length).fill(1);
     let x = build(true, null);
     for (let it = 0; it < 2; it++) { reweight(x, [0, 1]); x = physical(build(true, null)); }
     // Leave-one-out test of every floor anchor. A photo filled by a sofa seat or a bed, with no floor in
@@ -1006,8 +1057,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     if (o.anchorTest !== false) {
       const sep = (i, j) => Math.hypot(frames[i].pos[0] - frames[j].pos[0], frames[i].pos[1] - frames[j].pos[1], frames[i].pos[2] - frames[j].pos[2]);
       const keepRows = rows, keepWt = wt;
-      rows = floorRows.concat(overlapRows(null, (i, j) => sep(i, j) <= (o.nearBase ?? 0.08))); wt = new Float64Array(rows.length).fill(1);
-      const links = new Uint32Array(N); rows.forEach(r => { if (r.type) { links[r.i]++; links[r.j]++; } });
+      rows = floorRows.concat(overlapRows(x0, (i, j) => sep(i, j) <= (o.nearBase ?? 0.08)), priorRows); wt = new Float64Array(rows.length).fill(1);
+      const links = new Uint32Array(N); rows.forEach(r => { if (r.type === 1) { links[r.i]++; links[r.j]++; } });
       let xa = build(true, null); for (let it = 0; it < 2; it++) { reweight(xa, [0, 1]); xa = physical(build(true, null)); }
       const floorErr = (xx, i) => { const e = []; rows.forEach(r => { if (r.type === 0 && r.i === i) e.push(Math.abs(r.ci[0] * xx[2 * i] + r.ci[1] * xx[2 * i + 1] - r.rhs)); }); return e.length ? percentile(e, 0.5) : 0; };
       for (let pass = 0; pass < 4; pass++) {
@@ -1028,13 +1079,13 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       rows = keepRows; wt = keepWt;
       if (dropped.size) {
         for (let k = floorRows.length - 1; k >= 0; k--) if (dropped.has(floorRows[k].i)) floorRows.splice(k, 1);
-        rows = floorRows.concat(overlapRows(null)); wt = new Float64Array(rows.length).fill(1);
+        rows = floorRows.concat(overlapRows(x0), priorRows); wt = new Float64Array(rows.length).fill(1);
         x = build(true, null); for (let it = 0; it < 2; it++) { reweight(x, [0, 1]); x = physical(build(true, null)); }
       }
     }
     let bestX = x, bestD = disagreement(x);
     for (let outer = 0; outer < (o.iters ?? 3); outer++) {
-      rows = floorRows.concat(overlapRows(o.parallax === false ? null : x)); wt = new Float64Array(rows.length).fill(1);
+      rows = floorRows.concat(overlapRows(o.parallax === false ? null : x), priorRows); wt = new Float64Array(rows.length).fill(1);
       for (let it = 0; it < 3; it++) { reweight(x, [0, 1]); x = physical(build(true, null)); }
       const d = disagreement(x);
       if (d < bestD) { bestD = d; bestX = x; } else break;
@@ -1150,6 +1201,170 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Room structure from where surfaces meet. Along vertical lines through each photo the calibrated
+  // depth gives a profile of horizontal distance h and height y (from the camera). Whether a stretch is
+  // flat (floor, ceiling) or upright (wall) survives the depth network's errors, which stretch or bend a
+  // profile but do not turn a floor into a wall; and the angle at which the floor meets a wall, or a wall
+  // meets the ceiling, does not depend on the depth scale at all. With the phone height that angle gives
+  // the wall's distance exactly: D = camH·h/(−y) at the floor line. An upright run from floor to ceiling
+  // gives the ceiling height: C = camH·(1 + tan(up angle)/tan(down angle)). Walls whose foot is hidden
+  // (sofa, cabinets) are placed from the line where they meet the ceiling, once its height is known.
+  // o.fallback: {prof} from spotStructure, used (rescaled) where no wall line was seen.
+  // → {ceil, prof (distance from the spot centre per bin), seen (fraction of bins measured), scale, n}
+  // ---------------------------------------------------------------------------------------------
+  function spotLayout(frames, cal, camHeight, o = {}) {
+    const bins = o.bins || 720, dAz = (o.dAz ?? 0.75) * DEG, dEl = (o.dEl ?? 0.5) * DEG, EL0 = -80 * DEG, NE = Math.round(160 * DEG / dEl) + 1, H = camHeight;
+    const hh = new Float64Array(NE), yy = new Float64Array(NE), ok = new Uint8Array(NE), lab = new Int8Array(NE);
+    const walls = [], ceilJ = [], fulls = [], scales = [];
+    const med = a => { const b = a.slice().sort((x, z) => x - z); return b.length ? (b.length % 2 ? b[b.length >> 1] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2) : NaN; };
+    const runMed = (arr, a, b) => { const v = []; for (let k = a; k <= b; k++) if (ok[k]) v.push(arr[k]); return med(v); };
+    const put = (f, az, D, w, dbg) => { const P = [f.pos[0] + D * Math.sin(az), f.pos[2] - D * Math.cos(az)]; walls.push(Object.assign({ az: Math.atan2(P[0], -P[1]), d: Math.hypot(P[0], P[1]), w }, o.debug ? dbg : null)); };
+    frames.forEach((f, i) => {
+      const c = cal[i]; if (!c || !f.disp) return;
+      const cy = yawOf(f.cam.fwd);
+      for (let az = cy - 40 * DEG; az <= cy + 40 * DEG; az += dAz) {
+        const sa = Math.sin(az), ca = Math.cos(az); let n = 0;
+        for (let k = 0; k < NE; k++) {
+          const el = EL0 + k * dEl, ce = Math.cos(el), r = [sa * ce, Math.sin(el), -ca * ce]; ok[k] = 0;
+          const pr = RM.camProject(f.cam, f.dw, f.dh, f.fov, r); if (!pr) continue;
+          const px = pr[0], py = pr[1]; if (px < 0.5 || py < 0.5 || px > f.dw - 1.5 || py > f.dh - 1.5) continue;
+          const q = ((bilin(f.disp, f.dw, f.dh, px, py) - c.lo) * c.sc * c.a + c.b) * dot(r, f.cam.fwd); if (!(q > 1 / 20)) continue;
+          hh[k] = ce / q; yy[k] = r[1] / q; ok[k] = 1; n++;
+        }
+        if (n < 24) continue;
+        // 1 flat moving out (floor, table top), 2 upright, 3 flat moving in (ceiling), 0 unclear or a jump
+        for (let k = 0; k < NE; k++) {
+          lab[k] = 0; if (k < 2 || k >= NE - 2 || !ok[k - 2] || !ok[k] || !ok[k + 2]) continue;
+          const dh = hh[k + 2] - hh[k - 2], dy = yy[k + 2] - yy[k - 2]; if (Math.hypot(dh, dy) > 0.3 * Math.hypot(hh[k], yy[k])) continue;
+          const ph = Math.atan2(dy, dh) / DEG;
+          lab[k] = Math.abs(ph) < 32 ? 1 : Math.abs(ph - 90) < 32 ? 2 : Math.abs(ph) > 148 ? 3 : 0;
+        }
+        const runs = []; for (let k = 0; k < NE;) { let j = k; while (j + 1 < NE && lab[j + 1] === lab[k]) j++; let v = 0; for (let q = k; q <= j; q++) v += ok[q]; runs.push({ l: lab[k], a: k, b: j, n: j - k + 1, empty: !v }); k = j + 1; }
+        // a ceiling run reaches the top of what the photo shows, or is long: a short flat stretch overhead
+        // with wall above it is the underside of a shelf, a cabinet or a door head
+        const ceilingRun = s => { if (runs[s].n >= 8) return true; for (let t = s + 1; t < runs.length; t++) if (!runs[t].empty && runs[t].n > 2) return false; return true; };
+        const nextOf = (s, want, maxGap) => { let g = 0, t = s; while (t < runs.length && runs[t].l !== want && g + runs[t].n <= maxGap) { g += runs[t].n; t++; } return t < runs.length && runs[t].l === want ? t : -1; };
+        // floor line: the lowest flat run — it must be the floor (well below the camera: a table top or a
+        // sofa seat is not), followed by an upright run
+        let fj = null;
+        const F0 = runs.findIndex(R => R.l === 1 && R.n >= 3);
+        if (F0 >= 0) {
+          const F = runs[F0], yF = runMed(yy, Math.max(F.a, F.b - 7), F.b), v = nextOf(F0 + 1, 2, 2);
+          if (yF < -0.7 * H && v >= 0 && runs[v].n >= 4) fj = { yF, hV: runMed(hh, runs[v].a, Math.min(runs[v].b, runs[v].a + 7)), v };
+        }
+        // follow the wall up: upright runs at about the same distance, short unclear gaps allowed. It ends
+        // at the ceiling (a full wall), at the edge of the photo (cut: still a wall as far as we know), or
+        // at a flat top or a jump (furniture, unless tall)
+        let top = -1, cj = null;
+        if (fj) {
+          let v = fj.v, end = 'top'; top = runs[v].b;
+          for (let s = v + 1; s < runs.length; s++) {
+            const R = runs[s];
+            if (R.empty) { end = 'cut'; break; }
+            if (R.l === 2) { const hr = runMed(hh, R.a, Math.min(R.b, R.a + 5)); if (Math.abs(hr - fj.hV) < 0.12 * fj.hV + 0.05) { top = R.b; v = s; continue; } break; }
+            if (R.l === 3 && R.n >= 3 && s === nextOf(v + 1, 3, 2)) { if (ceilingRun(s)) { cj = { s, v }; end = 'ceil'; } break; }
+            if (R.n > 4) break;
+          }
+          if (v === runs.length - 1) end = 'cut';
+          const scale = H / -fj.yF, wallH = (yy[top] - fj.yF) * scale, D = fj.hV * scale;
+          const prio = end === 'ceil' ? 2 : end === 'cut' || wallH > 1.6 ? 1 : 0;
+          if (prio) { put(f, az, D, prio, { kind: 'floor', end, yF: fj.yF, hV: fj.hV, wallH, pitch: Math.asin(f.cam.fwd[1]) }); scales.push(scale); }
+          else if (end === 'top') {
+            // furniture (cabinet, sofa, table): the wall may show above it — an upright run clearly farther
+            // away, tall or running out of the photo; this profile's floor gives its scale
+            for (let s = v + 1; s < runs.length; s++) {
+              const R = runs[s]; if (R.l !== 2 || R.n < 4) continue;
+              const hr = runMed(hh, R.a, R.b); if (hr < fj.hV * 1.08 + 0.1) continue;
+              let cut = true; for (let t = s + 1; t < runs.length; t++) if (!runs[t].empty && runs[t].n > 2) cut = false;
+              const ext = (yy[R.b] - yy[R.a]) * scale;
+              if (ext > 0.5 || cut) put(f, az, hr * scale, 1, { kind: 'behind', hV: hr, yF: fj.yF, pitch: Math.asin(f.cam.fwd[1]) });
+              break;
+            }
+          }
+        }
+        // ceiling line: the topmost ceiling run with an upright run right below it
+        // (it must reach the top of what the photo shows, or be long: a short flat stretch overhead is the
+        // underside of a cabinet or shelf)
+        if (!cj) for (let s = runs.length - 1; s >= 0; s--) {
+          const C = runs[s]; if (C.l !== 3 || C.n < 3) continue;
+          if (!ceilingRun(s)) break;
+          let v = s - 1, g = 0; while (v >= 0 && runs[v].l !== 2 && g + runs[v].n <= 2) { g += runs[v].n; v--; }
+          if (v >= 0 && runs[v].l === 2 && runs[v].n >= 4) cj = { s, v };
+          break;
+        }
+        if (cj) {
+          const C = runs[cj.s], V = runs[cj.v], yC = runMed(yy, C.a, Math.min(C.b, C.a + 7)), hV = runMed(hh, Math.max(V.a, V.b - 7), V.b);
+          if (yC > 0 && hV > 0 && yC / hV > 0.12) {
+            const tanUp = yC / hV; ceilJ.push({ f, az, tanUp, dbg: o.debug ? { yC, hV, Cn: C.n, Vn: V.n, elC: (EL0 + C.a * dEl) / DEG, top: (EL0 + C.b * dEl) / DEG } : null });
+            if (fj && top >= V.b - 1) { fulls.push(H * (1 + tanUp / (-fj.yF / fj.hV))); if (o.debug) (o.debugFulls = o.debugFulls || []).push({ i: f.i, az: az / DEG, C: fulls[fulls.length - 1], yF: fj.yF, hV: fj.hV, yC, hVc: hV, elF: Math.atan2(fj.yF, fj.hV) / DEG, elC: Math.atan2(yC, hV) / DEG, labels: Array.from(lab).map(v => '.FVC'[v]).join('') }); } // one wall from floor to ceiling
+          }
+        }
+      }
+    });
+    const ceil = fulls.length >= (o.minFull ?? 6) ? med(fulls) : o.fallbackCeil || null;
+    if (ceil && ceil > H + 0.3) for (const j of ceilJ) put(j.f, j.az, (ceil - H) / j.tanUp, 3, Object.assign({ kind: 'ceiling', pitch: Math.asin(j.f.cam.fwd[1]), tanUp: j.tanUp }, j.dbg));
+    const fb = o.fallback && o.fallback.prof, pr = profileFrom(walls.map(w => ({ az: w.az, d: w.d, w: w.w })), bins, { fallback: fb });
+    return { ceil, fulls, sightings: walls.map(w => ({ az: w.az, d: w.d, w: w.w })), prof: pr.prof, seen: pr.seen, scale: pr.scale, measured: pr.measured, debugWalls: o.debug ? walls : undefined, n: { walls: walls.length, full: fulls.length, ceilLines: ceilJ.length } };
+  }
+
+  // Wall distance per direction around one spot from sightings [{az, d, w}] (w: 3 wall-ceiling line,
+  // 2 wall seen floor to ceiling, 1 wall foot or wall behind furniture). Per bin: the median of the best
+  // kind present there (o.others: sightings made from other spots, used where this spot saw nothing —
+  // conservatively, the nearer ones). Gaps are bridged by straight chords between the nearest measured
+  // directions (walls are straight); very long ones come from o.fallback, rescaled to the measured bins.
+  function profileFrom(walls, bins, o = {}) {
+    const binOf = az => ((Math.floor((az + Math.PI) / TAU * bins) % bins) + bins) % bins;
+    const med = a => { const b = a.slice().sort((x, z) => x - z); return b.length % 2 ? b[b.length >> 1] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2; };
+    const fill = list => { const L = Array.from({ length: bins }, () => [[], [], [], []]); for (const w of list) { const b = binOf(w.az); for (let d = -1; d <= 1; d++) L[(b + d + bins) % bins][w.w].push(w.d); } return L; };
+    const own = fill(walls), oth = o.others ? fill(o.others) : null;
+    const prof = new Float32Array(bins).fill(NaN), measured = new Uint8Array(bins); let seen = 0;
+    for (let b = 0; b < bins; b++) {
+      for (let p = 3; p >= 1 && !measured[b]; p--) if (own[b][p].length >= 2) { prof[b] = med(own[b][p]); measured[b] = 1; }
+      if (!measured[b] && oth) for (let p = 3; p >= 1 && !measured[b]; p--) if (oth[b][p].length >= 2) { prof[b] = percentile(oth[b][p], 0.3); measured[b] = 2; }
+      if (measured[b]) seen++;
+    }
+    // a wall another spot saw clearly (several floor-to-ceiling or wall-ceiling sightings) bounds this
+    // spot's view too, unless this spot saw that direction as clearly itself
+    const strong = oth ? Array.from({ length: bins }, (_, b) => { const L = oth[b][3].length >= 3 ? oth[b][3] : oth[b][2].length >= 3 ? oth[b][2] : null; return L ? med(L) : Infinity; }) : null;
+    const fb = o.fallback, rat = [];
+    if (fb) for (let b = 0; b < bins; b++) if (measured[b] && fb[b] > 0) rat.push(prof[b] / fb[b]);
+    const scale = rat.length >= 30 ? med(rat) : 1, maxChord = Math.round(bins * (o.maxChordDeg ?? 100) / 360);
+    if (!seen) { for (let b = 0; b < bins; b++) prof[b] = fb ? fb[b] : (o.defaultWall || 2); }
+    else for (let b = 0; b < bins; b++) if (!measured[b]) {
+      let l = 1, r = 1; while (l < bins && !measured[(b - l + bins) % bins]) l++; while (r < bins && !measured[(b + r) % bins]) r++;
+      const bl = (b - l + bins) % bins, br = (b + r) % bins, th = a => (a + 0.5) / bins * TAU - Math.PI, u = a => [Math.sin(th(a)), -Math.cos(th(a))];
+      const P1 = u(bl).map(v => v * prof[bl]), P2 = u(br).map(v => v * prof[br]), d = u(b), e = [P2[0] - P1[0], P2[1] - P1[1]];
+      const den = d[0] * e[1] - d[1] * e[0], t = Math.abs(den) > 1e-9 ? (P1[0] * e[1] - P1[1] * e[0]) / den : NaN;
+      const chord = t > 0.2 && t < 1.5 * Math.max(prof[bl], prof[br]) ? t : (prof[bl] * r + prof[br] * l) / (l + r);
+      // a long gap may hide a corner the chord cuts off: the depth profile may push it out, a little
+      prof[b] = l + r - 1 > maxChord / 3 && fb ? clamp(fb[b] * scale, chord, chord * 1.25 + 0.1) : chord;
+    }
+    if (strong) for (let b = 0; b < bins; b++) if (!(measured[b] === 1 && own[b][3].length >= 2) && prof[b] > strong[b] * 1.06 + 0.08) prof[b] = strong[b];
+    // narrow far spikes (open doorways, a glimpse into the next room) are clipped to the local median
+    const win = Math.round(bins * 12 / 360), out = new Float32Array(bins);
+    for (let a = 0; a < bins; a++) { const nb = []; for (let k = -win; k <= win; k++) nb.push(prof[(a + k + bins) % bins]); out[a] = Math.min(prof[a], percentile(nb, 0.5) * 1.06 + 0.15); }
+    return { prof: out, measured, seen: seen / bins, scale };
+  }
+  // Once the spots are placed: every spot's wall profile from its own sightings plus those of the others
+  // (a wall one spot saw only behind furniture or out of view may be plain to another).
+  function layoutProfiles(spots, poses, o = {}) {
+    const world = spots.map((sp, k) => (sp.sightings || []).map(w => { const q = rotY(w.d * Math.sin(w.az), -w.d * Math.cos(w.az), poses[k].yaw); return { x: q[0] + poses[k].x, z: q[1] + poses[k].z, w: w.w }; }));
+    return spots.map((sp, j) => {
+      if (!sp.sightings) return sp.prof;
+      const others = [];
+      world.forEach((list, k) => { if (k === j) return; for (const p of list) { const v = rotY(p.x - poses[j].x, p.z - poses[j].z, -poses[j].yaw); others.push({ az: Math.atan2(v[0], -v[1]), d: Math.hypot(v[0], v[1]), w: p.w }); } });
+      return profileFrom(sp.sightings, sp.prof.length, { others, fallback: sp.fallbackProf }).prof;
+    });
+  }
+  // The ceiling height from all spots: the median of every wall seen from floor to ceiling.
+  function pooledCeil(spots, fallback) {
+    const all = []; for (const sp of spots) if (sp.fulls) all.push(...sp.fulls);
+    if (all.length >= 6) { all.sort((a, b) => a - b); return all.length % 2 ? all[all.length >> 1] : (all[all.length / 2 - 1] + all[all.length / 2]) / 2; }
+    const c = spots.map(sp => sp.ceil).filter(Boolean).sort((a, b) => a - b);
+    return c.length ? (c.length % 2 ? c[c.length >> 1] : (c[c.length / 2 - 1] + c[c.length / 2]) / 2) : fallback;
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Lining spots up. Rotation is known from the motion sensors up to a small heading drift, so each
   // spot is placed by a top-down cross-correlation of "wall occupancy" (points between 0.3 m and the
   // ceiling, weighted by distance² so far walls count) over shifts and a few degrees of yaw, then refined
@@ -1219,10 +1434,120 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     }
     return { x: tx, z: tz, yaw };
   }
+  // ---------------------------------------------------------------------------------------------
+  // The floor two spots both saw. Floor pixels are projected straight down onto the floor plane
+  // (camHeight below the spot), which takes only gravity, the field of view and the phone height: the AI
+  // depth merely decides "this pixel is floor" (its calibrated depth agrees with the plane). Each spot so
+  // gets a top-down picture of its floor, and two pictures of the same wood grain, rug edge or tile joint
+  // line up far more precisely than walls whose distances come from the depth network.
+  // ---------------------------------------------------------------------------------------------
+  function floorSamples(frames, cal, camHeight, o = {}) {
+    const maxR = o.maxR ?? 4, tol = o.tol ?? 0.12, step = o.step || 2, X = [], Z = [], L = [], Wt = [];
+    frames.forEach((f, i) => {
+      const img = f.rgba; if (!img) return;
+      const c = cal && cal[i], H = camHeight + (f.pos[1] || 0), w = f.cw, h = f.ch, start = X.length;
+      let lsum = 0;
+      for (let y = step >> 1; y < h; y += step) for (let x = step >> 1; x < w; x += step) {
+        const r = RM.camRay(f.cam, w, h, f.fov, x, y); if (r[1] > -0.15) continue;
+        const t = H / -r[1], px = f.pos[0] + t * r[0], pz = f.pos[2] + t * r[2]; if (px * px + pz * pz > maxR * maxR) continue;
+        if (c && f.disp) { const rd = rayDistance(f, c, (x + 0.5) / w * f.dw - 0.5, (y + 0.5) / h * f.dh - 0.5); if (!rd || Math.abs(rd.t / t - 1) > tol) continue; }
+        const k = (y * w + x) * 4, lum = 0.299 * img[k] + 0.587 * img[k + 1] + 0.114 * img[k + 2];
+        const xn = 2 * x / (w - 1) - 1, yn = 2 * y / (h - 1) - 1;
+        X.push(px); Z.push(pz); L.push(lum); Wt.push(Math.max(0.05, (1 - xn * xn) * (1 - yn * yn)) / t); lsum += lum;
+      }
+      const m = X.length - start; // exposure: every photo's floor averages 1
+      if (m > 20 && lsum > 0) { const g = m / lsum; for (let k = start; k < X.length; k++) L[k] *= g; } else { X.length = Z.length = L.length = Wt.length = start; }
+    });
+    return { x: Float32Array.from(X), z: Float32Array.from(Z), l: Float32Array.from(L), w: Float32Array.from(Wt), n: X.length };
+  }
+  function moveSamples(S, pose) {
+    const ca = Math.cos(pose.yaw), sa = Math.sin(pose.yaw), x = new Float32Array(S.n), z = new Float32Array(S.n);
+    for (let i = 0; i < S.n; i++) { x[i] = S.x[i] * ca - S.z[i] * sa + pose.x; z[i] = S.x[i] * sa + S.z[i] * ca + pose.z; }
+    return { x, z, l: S.l, w: S.w, n: S.n };
+  }
+  function joinSamples(list) {
+    const n = list.reduce((a, s) => a + s.n, 0), out = { x: new Float32Array(n), z: new Float32Array(n), l: new Float32Array(n), w: new Float32Array(n), n };
+    let o = 0; for (const s of list) { out.x.set(s.x, o); out.z.set(s.z, o); out.l.set(s.l, o); out.w.set(s.w, o); o += s.n; }
+    return out;
+  }
+  function boxSum(src, N, r) { // separable (2r+1)² box sum, clipped at the borders
+    const tmp = new Float64Array(N * N), out = new Float64Array(N * N);
+    for (let y = 0; y < N; y++) { const row = y * N; let s = 0; for (let x = 0; x <= r && x < N; x++) s += src[row + x]; for (let x = 0; x < N; x++) { tmp[row + x] = s; if (x - r >= 0) s -= src[row + x - r]; if (x + r + 1 < N) s += src[row + x + r + 1]; } }
+    for (let x = 0; x < N; x++) { let s = 0; for (let y = 0; y <= r && y < N; y++) s += tmp[y * N + x]; for (let y = 0; y < N; y++) { out[y * N + x] = s; if (y - r >= 0) s -= tmp[(y - r) * N + x]; if (y + r + 1 < N) s += tmp[(y + r + 1) * N + x]; } }
+    return out;
+  }
+  // Top-down floor picture of samples S (moved by pose), N×N cells around (cx, cz), high-passed: the local
+  // mean is removed, so exposure and shading differences between spots vanish while grain, joints and
+  // edges stay. Cells near the edge of what was seen have no reliable local mean and are left out.
+  function floorRaster(S, pose, N, cell, r = 4, cx = 0, cz = 0) {
+    const sum = new Float64Array(N * N), wt = new Float64Array(N * N), c0 = N / 2, ca = Math.cos(pose.yaw), sa = Math.sin(pose.yaw);
+    for (let i = 0; i < S.n; i++) {
+      const X = S.x[i] * ca - S.z[i] * sa + pose.x - cx, Z = S.x[i] * sa + S.z[i] * ca + pose.z - cz, gx = Math.floor(X / cell + c0), gz = Math.floor(Z / cell + c0);
+      if (gx < 0 || gz < 0 || gx >= N || gz >= N) continue;
+      const k = gz * N + gx; sum[k] += S.l[i] * S.w[i]; wt[k] += S.w[i];
+    }
+    const m = new Float64Array(N * N), v = new Float64Array(N * N);
+    for (let k = 0; k < N * N; k++) if (wt[k] > 0) { m[k] = 1; v[k] = sum[k] / wt[k]; }
+    const bv = boxSum(v, N, r), bm = boxSum(m, N, r), full = (2 * r + 1) ** 2;
+    for (let k = 0; k < N * N; k++) { if (!m[k] || bm[k] < 0.6 * full) { m[k] = 0; v[k] = 0; } else v[k] -= bv[k] / bm[k]; }
+    return { v, m, N, cell, cx, cz };
+  }
+  // Where do floor samples B (a spot, own frame) sit on the floor A (world)? Masked normalised
+  // cross-correlation by FFT over shifts, for each candidate yaw; then a fine search on a 2 cm grid.
+  // → {x, z, yaw, score (0–1), second (best score at least 30 cm away), overlap (m²)}
+  function floorMatch(A, B, o = {}) {
+    const N = o.N || 256, cell = o.cell || 0.06, r = o.r ?? 3, NN = N * N, maxShift = Math.round((o.maxShift ?? 5) / cell), minOv = (o.minOverlap ?? 1.2) / (cell * cell);
+    const yaws = []; for (let d = -(o.yawSpan ?? 8); d <= (o.yawSpan ?? 8) + 1e-9; d += o.yawStep ?? 1) yaws.push(d * DEG);
+    const FT = arr => { const re = Float64Array.from(arr), im = new Float64Array(NN); fft2(re, im, N, false); return [re, im]; };
+    const corr = (X, Y) => { const re = new Float64Array(NN), im = new Float64Array(NN); for (let q = 0; q < NN; q++) { re[q] = X[0][q] * Y[0][q] + X[1][q] * Y[1][q]; im[q] = X[1][q] * Y[0][q] - X[0][q] * Y[1][q]; } fft2(re, im, N, true); return re; };
+    const a = floorRaster(A, { x: 0, z: 0, yaw: 0 }, N, cell, r), FA = FT(a.v), FmA = FT(a.m), FA2 = FT(a.v.map(x => x * x));
+    const maps = [];
+    for (const yaw of yaws) {
+      const b = floorRaster(B, { x: 0, z: 0, yaw }, N, cell, r), FB = FT(b.v), FmB = FT(b.m), FB2 = FT(b.v.map(x => x * x));
+      const num = corr(FA, FB), eA = corr(FA2, FmB), eB = corr(FmA, FB2), ov = corr(FmA, FmB), S = new Float32Array((2 * maxShift + 1) ** 2).fill(-1);
+      for (let sz = -maxShift, j = 0; sz <= maxShift; sz++) for (let sx = -maxShift; sx <= maxShift; sx++, j++) {
+        const q = ((sz + N) % N) * N + ((sx + N) % N); if (ov[q] / NN < minOv) continue;
+        const d = eA[q] * eB[q]; if (d > 0) S[j] = num[q] / Math.sqrt(d);
+      }
+      maps.push({ yaw, S });
+    }
+    const W = 2 * maxShift + 1; let best = null;
+    maps.forEach((mp, yi) => { for (let j = 0; j < mp.S.length; j++) if (!best || mp.S[j] > best.score) best = { yi, j, score: mp.S[j] }; });
+    if (!best || best.score <= 0) return null;
+    const bx = best.j % W - maxShift, bz = Math.floor(best.j / W) - maxShift, ex = Math.round(0.3 / cell);
+    let second = -1; maps.forEach(mp => { for (let j = 0; j < mp.S.length; j++) { const x = j % W - maxShift, z = Math.floor(j / W) - maxShift; if (Math.max(Math.abs(x - bx), Math.abs(z - bz)) > ex && mp.S[j] > second) second = mp.S[j]; } });
+    // fine: 2 cm grid around the coarse peak (B's high-passed cells against A's, bilinear)
+    const fine = floorRefine(A, B, { x: bx * cell, z: bz * cell, yaw: maps[best.yi].yaw }, o);
+    return Object.assign(fine, { coarse: best.score, second, overlap: fine.overlap });
+  }
+  function floorRefine(A, B, pose, o = {}) {
+    const cell = o.fineCell || 0.02, r = o.fineR ?? 8, N = 512;
+    const a = floorRaster(A, { x: 0, z: 0, yaw: 0 }, N, cell, r, pose.x, pose.z), b = floorRaster(B, { x: 0, z: 0, yaw: 0 }, N, cell, r);
+    const cells = []; for (let k = 0; k < N * N; k++) if (b.m[k]) cells.push(k);
+    const stepK = Math.max(1, Math.floor(cells.length / (o.fineCells || 30000))), bx = [], bz = [], bv = [];
+    for (let i = 0; i < cells.length; i += stepK) { const k = cells[i]; bx.push((k % N + 0.5 - N / 2) * cell); bz.push((Math.floor(k / N) + 0.5 - N / 2) * cell); bv.push(b.v[k]); }
+    const score = (x, z, yaw) => {
+      const ca = Math.cos(yaw), sa = Math.sin(yaw); let sab = 0, saa = 0, sbb = 0, n = 0;
+      for (let i = 0; i < bx.length; i++) {
+        const X = (bx[i] * ca - bz[i] * sa + x - a.cx) / cell + N / 2 - 0.5, Z = (bx[i] * sa + bz[i] * ca + z - a.cz) / cell + N / 2 - 0.5;
+        const x0 = Math.floor(X), z0 = Math.floor(Z); if (x0 < 0 || z0 < 0 || x0 >= N - 1 || z0 >= N - 1) continue;
+        const k = z0 * N + x0; if (!(a.m[k] && a.m[k + 1] && a.m[k + N] && a.m[k + N + 1])) continue;
+        const fx = X - x0, fz = Z - z0, av = (a.v[k] * (1 - fx) + a.v[k + 1] * fx) * (1 - fz) + (a.v[k + N] * (1 - fx) + a.v[k + N + 1] * fx) * fz;
+        sab += av * bv[i]; saa += av * av; sbb += bv[i] * bv[i]; n++;
+      }
+      return { s: n > 200 && saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : -1, n };
+    };
+    let cur = { x: pose.x, z: pose.z, yaw: pose.yaw }, cs = score(cur.x, cur.z, cur.yaw);
+    const shifts = (span, st) => { let b = cur, bs = cs; for (let dz = -span; dz <= span + 1e-9; dz += st) for (let dx = -span; dx <= span + 1e-9; dx += st) { const s = score(cur.x + dx, cur.z + dz, cur.yaw); if (s.s > bs.s) { bs = s; b = { x: cur.x + dx, z: cur.z + dz, yaw: cur.yaw }; } } cur = b; cs = bs; };
+    const turns = (span, st) => { let b = cur, bs = cs; for (let d = -span; d <= span + 1e-9; d += st) { const s = score(cur.x, cur.z, cur.yaw + d * DEG); if (s.s > bs.s) { bs = s; b = { x: cur.x, z: cur.z, yaw: cur.yaw + d * DEG }; } } cur = b; cs = bs; };
+    shifts(0.12, 0.03); turns(1.2, 0.3); shifts(0.04, 0.01); turns(0.3, 0.1); shifts(0.01, 0.005);
+    return { x: cur.x, z: cur.z, yaw: cur.yaw, score: cs.s, overlap: cs.n * stepK * cell * cell };
+  }
+
   function alignSpots(spots, o = {}) {
-    const N = o.grid || 256, cell = o.cell || 0.08, poses = [{ x: 0, z: 0, yaw: 0 }];
-    const wp = spots.map(s => wallPoints(s.cloud, s.camHeight, s.ceil));
-    let target = wp[0].slice();
+    const N = o.grid || 256, cell = o.cell || 0.08, poses = [{ x: 0, z: 0, yaw: 0, method: 'reference' }];
+    const wp = spots.map(s => wallPoints(s.cloud, s.camHeight, s.ceil)), fl = spots.map(s => s.floor && s.floor.n > 2000 ? s.floor : null);
+    let target = wp[0].slice(); const ftarget = fl[0] ? [fl[0]] : [];
     for (let k = 1; k < spots.length; k++) {
       const A = occupancy(target, { x: 0, z: 0, yaw: 0 }, N, cell), Are = Float64Array.from(A), Aim = new Float64Array(N * N); fft2(Are, Aim, N, false);
       let best = null;
@@ -1237,9 +1562,19 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           if (!best || v > best.v) best = { v, x: sx * cell, z: sz * cell, yaw: dy * DEG };
         }
       }
-      const refined = icp2d(wp[k], target, best, 30);
-      poses.push(refined);
-      for (const p of wp[k]) { const q = rotY(p[0], p[1], refined.yaw); target.push([q[0] + refined.x, q[1] + refined.z]); }
+      let pose = Object.assign(icp2d(wp[k], target, best, 30), { method: 'walls' });
+      // The shared floor decides when its match is clear: a strong peak, well above any other place.
+      if (fl[k] && ftarget.length && o.floor !== false) {
+        const m = floorMatch(joinSamples(ftarget), fl[k], { yawSpan: o.yawSpan ?? 8 });
+        if (m) {
+          const info = { floorScore: +m.score.toFixed(3), floorCoarse: +m.coarse.toFixed(3), floorSecond: +m.second.toFixed(3), floorOverlapM2: +m.overlap.toFixed(1), wallsPose: { x: +pose.x.toFixed(2), z: +pose.z.toFixed(2), yawDeg: +(pose.yaw / DEG).toFixed(1) } };
+          if (m.coarse >= (o.floorMin ?? 0.15) && m.coarse - m.second >= (o.floorGap ?? 0.03) && m.overlap >= (o.floorOverlap ?? 1.5)) pose = Object.assign({ x: m.x, z: m.z, yaw: m.yaw, method: 'floor' }, info);
+          else Object.assign(pose, info);
+        }
+      }
+      poses.push(pose);
+      for (const p of wp[k]) { const q = rotY(p[0], p[1], pose.yaw); target.push([q[0] + pose.x, q[1] + pose.z]); }
+      if (fl[k]) ftarget.push(moveSamples(fl[k], pose));
     }
     return poses;
   }
@@ -1305,8 +1640,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       const a = poly[i], b = poly[(i + 1) % n], ang = Math.atan2(b[1] - a[1], b[0] - a[0]), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       let rel = ang - phi; rel -= Math.round(rel / (Math.PI / 2)) * (Math.PI / 2);
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      if (Math.abs(rel) < tol) { const da = ang - rel; lines.push({ p: mid, d: [Math.cos(da), Math.sin(da)], len, axis: ((Math.round((ang - phi) / (Math.PI / 2)) % 2) + 2) % 2 }); }
-      else lines.push({ p: mid, d: [(b[0] - a[0]) / (len || 1), (b[1] - a[1]) / (len || 1)], len, axis: -1 });
+      if (Math.abs(rel) < tol) { const da = ang - rel; lines.push({ p: mid, d: [Math.cos(da), Math.sin(da)], len, axis: ((Math.round((ang - phi) / (Math.PI / 2)) % 2) + 2) % 2, start: a }); }
+      else lines.push({ p: mid, d: [(b[0] - a[0]) / (len || 1), (b[1] - a[1]) / (len || 1)], len, axis: -1, start: a });
     }
     // merge consecutive parallel snapped lines that are (nearly) the same wall; insert a step otherwise
     const merged = [];
@@ -1315,14 +1650,16 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       if (prev && prev.axis >= 0 && prev.axis === L.axis) {
         const nrm = [-prev.d[1], prev.d[0]], off = (L.p[0] - prev.p[0]) * nrm[0] + (L.p[1] - prev.p[1]) * nrm[1];
         if (Math.abs(off) < (o.mergeTol ?? 0.12)) { const w = prev.len + L.len, f = L.len / w; prev.p = [prev.p[0] + nrm[0] * off * f, prev.p[1] + nrm[1] * off * f]; prev.len = w; continue; }
-        merged.push({ p: L.p, d: [-prev.d[1], prev.d[0]], len: 0, axis: 1 - prev.axis, step: true }); // perpendicular connector
+        merged.push({ p: L.start || L.p, d: [-prev.d[1], prev.d[0]], len: 0, axis: 1 - prev.axis, step: true, start: L.start }); // perpendicular connector where the two walls meet
       }
       merged.push(Object.assign({}, L));
     }
     if (merged.length > 1) { const f = merged[0], l = merged[merged.length - 1]; if (f.axis >= 0 && f.axis === l.axis) { const nrm = [-l.d[1], l.d[0]], off = (f.p[0] - l.p[0]) * nrm[0] + (f.p[1] - l.p[1]) * nrm[1]; if (Math.abs(off) < (o.mergeTol ?? 0.12)) { merged.shift(); } } }
     // short walls that follow neither main direction are tracing noise (a chamfer at a corner): drop them
     let L2 = merged.filter(L => !(L.axis < 0 && L.len < (o.minFree ?? 0.3)));
-    const verts = Ls => { const out = []; for (let i = 0; i < Ls.length; i++) { const X = lineIntersect(Ls[(i + Ls.length - 1) % Ls.length].p, Ls[(i + Ls.length - 1) % Ls.length].d, Ls[i].p, Ls[i].d); if (X) out.push(X); } return out; };
+    // corners: where consecutive walls meet; two nearly parallel walls meet far away, so there the traced
+    // corner stays
+    const verts = Ls => { const out = []; for (let i = 0; i < Ls.length; i++) { const P = Ls[(i + Ls.length - 1) % Ls.length], X = lineIntersect(P.p, P.d, Ls[i].p, Ls[i].d), S0 = Ls[i].start; out.push(X && (!S0 || Math.hypot(X[0] - S0[0], X[1] - S0[1]) < (o.maxCornerMove ?? 0.4)) ? X : S0 || X); } return out.filter(Boolean); };
     let poly2 = verts(L2);
     // drop tiny edges (< 12 cm) by re-intersecting their neighbours
     for (let pass = 0; pass < 3 && poly2.length > 3; pass++) {
@@ -1330,6 +1667,57 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       if (keep.length === poly2.length) break; poly2 = keep;
     }
     return poly2;
+  }
+  // Small jogs and chamfers are tracing noise more often than architecture: the shortest edge, while
+  // under minStep, goes — a step between two parallel walls merges them (at their length-weighted
+  // offset), a short edge between two angled walls is replaced by their corner. A change that would
+  // fold the outline or change its area by more than 4 % is kept.
+  function removeJogs(poly, minStep = 0.3, minChamfer = 0.6) {
+    let P = poly.map(v => v.slice()); const keep = new Set(), area0 = Math.abs(polyArea(P));
+    const unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1e-9; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+    for (let iter = 0; iter < 200 && P.length > 4; iter++) {
+      const n = P.length; let bi = -1, bl = Infinity;
+      for (let i = 0; i < n; i++) {
+        if (keep.has(P[i].join() + '|' + P[(i + 1) % n].join())) continue;
+        const z = P[(i + n - 1) % n], a = P[i], b = P[(i + 1) % n], c = P[(i + 2) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        // a short diagonal cutting the corner between two perpendicular walls counts as a jog up to minChamfer
+        const u0 = unit(z, a), u1 = unit(a, b), u2 = unit(b, c), perp = Math.abs(u0[0] * u2[0] + u0[1] * u2[1]) < 0.17, diag = Math.abs(Math.abs(u0[0] * u1[0] + u0[1] * u1[1]) - 0.707) < 0.25;
+        const lim = perp && diag ? minChamfer : minStep;
+        if (L < lim && L / lim < bl) { bl = L / lim; bi = i; }
+      }
+      if (bi < 0) break;
+      bl = Math.hypot(P[(bi + 1) % n][0] - P[bi][0], P[(bi + 1) % n][1] - P[bi][1]);
+      const ix = k => (k % n + n) % n, Z = P[ix(bi - 2)], A = P[ix(bi - 1)], B = P[bi], C = P[ix(bi + 1)], D = P[ix(bi + 2)], E = P[ix(bi + 3)];
+      const d1 = unit(A, B), d3 = unit(C, D), Q = P.slice();
+      if (d1[0] * d3[0] + d1[1] * d3[1] > 0.96) {
+        const L1 = Math.hypot(B[0] - A[0], B[1] - A[1]), L3 = Math.hypot(D[0] - C[0], D[1] - C[1]), nm = [-d1[1], d1[0]];
+        const off = ((A[0] * nm[0] + A[1] * nm[1]) * L1 + (C[0] * nm[0] + C[1] * nm[1]) * L3) / (L1 + L3), M = [nm[0] * off, nm[1] * off];
+        const A2 = lineIntersect(Z, unit(Z, A), M, d1), D2 = lineIntersect(M, d1, D, unit(D, E)), lim = 2 * minStep + bl;
+        if (!A2 || !D2 || n < 6 || Math.hypot(A2[0] - A[0], A2[1] - A[1]) > lim || Math.hypot(D2[0] - D[0], D2[1] - D[1]) > lim) { keep.add(B.join() + '|' + C.join()); continue; }
+        Q[ix(bi - 1)] = A2; Q[ix(bi + 2)] = D2; Q.splice(bi, 1); Q.splice(Q.indexOf(C), 1);
+      } else {
+        const X = lineIntersect(A, d1, D, d3);
+        if (!X || Math.hypot(X[0] - B[0], X[1] - B[1]) > 2 * minStep + bl) { keep.add(B.join() + '|' + C.join()); continue; }
+        Q[bi] = X; Q.splice(Q.indexOf(C), 1);
+      }
+      if (Q.length < 3 || selfIntersects(Q) || Math.abs(Math.abs(polyArea(Q)) / area0 - 1) > 0.04) { keep.add(B.join() + '|' + C.join()); continue; }
+      P = Q;
+    }
+    return P;
+  }
+  // Corners between two nearly collinear walls go (a wall traced in pieces at slightly different offsets)
+  function mergeCollinear(poly, angDeg = 8, dist = 0.08) {
+    let P = poly.slice(), changed = true;
+    while (changed && P.length > 3) {
+      changed = false;
+      for (let i = 0; i < P.length && P.length > 3; i++) {
+        const a = P[(i + P.length - 1) % P.length], b = P[i], c = P[(i + 1) % P.length];
+        const a1 = Math.atan2(b[1] - a[1], b[0] - a[0]), a2 = Math.atan2(c[1] - b[1], c[0] - b[0]), da = Math.abs(Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1)));
+        const L = Math.hypot(c[0] - a[0], c[1] - a[1]) || 1e-9, off = Math.abs((c[0] - a[0]) * (a[1] - b[1]) - (a[0] - b[0]) * (c[1] - a[1])) / L;
+        if (da < angDeg * DEG && off < dist) { P.splice(i, 1); changed = true; i--; }
+      }
+    }
+    return P;
   }
   function floorPlan(spots, poses, o = {}) {
     const cell = o.cell || 0.04, bins = spots[0].prof.length;
@@ -1355,14 +1743,37 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const ring = traceBoundary(comp, W, H).map(([gx, gz]) => [x0 + (gx + 0.5) * cell, z0 + (gz + 0.5) * cell]);
     let raw = simplifyClosed(ring, o.eps || 0.06);
     if (polyArea(raw) < 0) raw = raw.reverse();
-    // main directions: length-weighted histogram of edge angles mod 90°
-    const hist = new Float64Array(90);
-    for (let i = 0; i < raw.length; i++) { const a = raw[i], b = raw[(i + 1) % raw.length], ang = Math.atan2(b[1] - a[1], b[0] - a[0]) / DEG, deg = ((ang % 90) + 90) % 90; hist[Math.floor(deg) % 90] += Math.hypot(b[0] - a[0], b[1] - a[1]); }
-    let bi = 0, bv = -1; for (let k = 0; k < 90; k++) { let v = 0; for (let j = -2; j <= 2; j++) v += hist[(k + j + 90) % 90] * (3 - Math.abs(j)); if (v > bv) { bv = v; bi = k; } }
-    const phi = (o.phi != null ? o.phi : bi * DEG);
+    // main directions: straight stretches of the traced boundary (chords ~0.6 m long that every point
+    // in between stays within 3 cm of) vote for their angle mod 90°, in quarter-degree bins
+    const hist = new Float64Array(360), n = ring.length, span = Math.max(4, Math.round(0.6 / cell));
+    for (let i = 0; i < n; i += 2) {
+      const a = ring[i], b = ring[(i + span) % n], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.4 * span * cell) continue;
+      let dev = 0; for (let k = 1; k < span; k++) { const p = ring[(i + k) % n]; dev = Math.max(dev, Math.abs((b[0] - a[0]) * (a[1] - p[1]) - (a[0] - p[0]) * (b[1] - a[1])) / L); }
+      if (dev > 0.03) continue;
+      const deg = ((Math.atan2(b[1] - a[1], b[0] - a[0]) / DEG % 90) + 90) % 90; hist[Math.floor(deg * 4) % 360] += L;
+    }
+    let bi = 0, bv = -1; for (let k = 0; k < 360; k++) { let v = 0; for (let j = -6; j <= 6; j++) v += hist[(k + j + 360) % 360] * (7 - Math.abs(j)); if (v > bv) { bv = v; bi = k; } }
+    let phi = bv > 0 ? (bi + 0.5) / 4 * DEG : 0;
+    if (!(bv > 0)) { // no straight stretch at all: edges of the simplified outline
+      const h2 = new Float64Array(90); for (let i = 0; i < raw.length; i++) { const a = raw[i], b = raw[(i + 1) % raw.length], deg = ((Math.atan2(b[1] - a[1], b[0] - a[0]) / DEG % 90) + 90) % 90; h2[Math.floor(deg) % 90] += Math.hypot(b[0] - a[0], b[1] - a[1]); }
+      let b2 = 0; for (let k = 1; k < 90; k++) if (h2[k] > h2[b2]) b2 = k; phi = (b2 + 0.5) * DEG;
+    }
+    if (o.phi != null) phi = o.phi;
     let poly = o.snap === false ? raw : snapManhattan(raw, phi, o);
-    const ok = o.snap !== false && poly.length >= 3 && !selfIntersects(poly) && Math.abs(Math.abs(polyArea(poly)) / Math.abs(polyArea(raw)) - 1) < 0.15;
-    if (!ok) poly = raw;
+    if (o.snap !== false) {
+      poly = mergeCollinear(poly);
+      if (poly.length >= 3) { const again = snapManhattan(poly, phi, o); if (again.length >= 3 && !selfIntersects(again)) poly = again; }
+      if (o.minStep !== 0 && poly.length > 4) poly = removeJogs(poly, o.minStep ?? 0.3);
+      poly = mergeCollinear(poly, 3, 0.03);
+    }
+    // a straightened outline must stay close to the traced one everywhere (no corner thrown far out by
+    // two nearly parallel walls)
+    const segDist = (p, P) => { let m = Infinity; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], ex = b[0] - a[0], ez = b[1] - a[1], L2 = ex * ex + ez * ez || 1e-12, t = clamp(((p[0] - a[0]) * ex + (p[1] - a[1]) * ez) / L2, 0, 1); m = Math.min(m, Math.hypot(a[0] + t * ex - p[0], a[1] + t * ez - p[1])); } return m; };
+    const ok = o.snap !== false && poly.length >= 3 && !selfIntersects(poly) && Math.abs(Math.abs(polyArea(poly)) / Math.abs(polyArea(raw)) - 1) < 0.15 && poly.every(v => segDist(v, raw) < 0.45);
+    if (!ok) { // not straightened: still drop the tracing noise (a coarser simplification, near-collinear pieces merged)
+      poly = raw;
+      if (o.snap !== false) { const c = mergeCollinear(simplifyClosed(ring, o.epsFallback ?? 0.12), 10, 0.1); if (c.length >= 3 && !selfIntersects(c)) poly = c; }
+    }
     if (polyArea(poly) < 0) poly = poly.reverse();
     return { poly, raw, phi, snapped: ok, area: Math.abs(polyArea(poly)) };
   }
@@ -1375,9 +1786,95 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // room: {poly, height, camHeight, spots: [{x, z, yaw}]}; views[k]: {pano: RGBA image, depth: depthPanorama}
   // ---------------------------------------------------------------------------------------------
   function spotPanorama(frames, depth, fov, W = 1536, H = 768) {
-    const pano = new RM.Panorama(W, H);
-    for (const f of frames) pano.add({ data: f.rgba, w: f.cw, h: f.ch, cam: f.cam }, fov, { pos: f.pos, depthFn: (x, y, z) => depth.at([x, y, z]) });
-    return { image: pano.toImage(), coverage: pano.coverage() };
+    const pano = new RM.Panorama(W, H), gains = new Map();
+    for (const f of frames) gains.set(f, pano.add({ data: f.rgba, w: f.cw, h: f.ch, cam: f.cam }, fov, { pos: f.pos, depthFn: (x, y, z) => depth.at([x, y, z]) }));
+    return { image: pano.toImage(), coverage: pano.coverage(), gains };
+  }
+  // ---------------------------------------------------------------------------------------------
+  // Textures straight from the photos: sharper than through the panoramas (no averaging of overlapping
+  // photos, no second resampling, and the full-resolution photo where there is one). Pass 1, faceSources:
+  // every texel picks the photo that sees it best — most squarely, closest, nearest the photo's centre —
+  // among photos whose own depth shows nothing in front of it; where a second photo is nearly as good it
+  // blends in, so seams between photos soften. Pass 2, paintFromPhoto: once per photo, with its pixels.
+  // photos[i]: {spot, cam, pos, fov, disp, dw, dh, cal}; room.spots[k]: {x, z, yaw}
+  // → {w, h, a, ua, va, b, ub, vb, wb, uses: Set of photo indices}
+  // ---------------------------------------------------------------------------------------------
+  function faceSources(room, photos, f, o = {}) {
+    const res = o.res || 120, w = clamp(Math.round(f.width * res), 8, o.maxSide || 1024), h = clamp(Math.round(f.height * res), 8, o.maxSide || 1024), n = w * h;
+    const inside = f.kind === 'wall' ? null : (x, z) => pointInPoly(x, z, room.poly), N = f.inward;
+    const prep = photos.map(p => { const sp = room.spots[p.spot]; return { p, sp, cy: Math.cos(sp.yaw), sy: Math.sin(sp.yaw), F: (Math.max(p.dw, p.dh) / 2) / Math.tan(p.fov / 2) }; });
+    // photo q's view of world point X: weight (0 = unseen) and where in the photo (0–1)
+    const view = (q, X, occl, out) => {
+      const dx = X[0] - q.sp.x, dz = X[2] - q.sp.z, lx = dx * q.cy + dz * q.sy, lz = -dx * q.sy + dz * q.cy, p = q.p, c = p.cam;
+      const d0 = lx - p.pos[0], d1 = X[1] - room.camHeight - p.pos[1], d2 = lz - p.pos[2];
+      const zc = d0 * c.fwd[0] + d1 * c.fwd[1] + d2 * c.fwd[2]; if (zc < 0.05) return 0;
+      const px = p.dw / 2 + q.F * (d0 * c.right[0] + d1 * c.right[1] + d2 * c.right[2]) / zc - 0.5, py = p.dh / 2 - q.F * (d0 * c.up[0] + d1 * c.up[1] + d2 * c.up[2]) / zc - 0.5;
+      if (px < 0 || py < 0 || px > p.dw - 1 || py > p.dh - 1) return 0;
+      const t = Math.hypot(d0, d1, d2), xn = 2 * (px + 0.5) / p.dw - 1, yn = 2 * (py + 0.5) / p.dh - 1;
+      const wx = d0 * q.cy - d2 * q.sy, wz = d0 * q.sy + d2 * q.cy, cosI = -(wx * N[0] + d1 * N[1] + wz * N[2]) / t;
+      let wgt = (1 - xn * xn) * (1 - yn * yn) * Math.pow(Math.max(0.05, cosI), 1.5) / (t * t);
+      if (occl && p.disp && p.cal) { // the photo's own depth: something clearly nearer in front of X?
+        const cc = p.cal, q2 = ((bilin(p.disp, p.dw, p.dh, px, py) - cc.lo) * cc.sc * cc.a + cc.b) * (zc / t);
+        if (q2 > 0 && 1 / q2 < 0.85 * t - 0.1) wgt *= 0.02;
+      }
+      if (out) { out.u = (px + 0.5) / p.dw; out.v = (py + 0.5) / p.dh; }
+      return wgt;
+    };
+    // photos that see any part of the face
+    const cand = [];
+    prep.forEach((q, i) => { let any = false; for (let s = 0; s <= 4 && !any; s++) for (let t = 0; t <= 4 && !any; t++) { const X = f.P(s / 4, t / 4); if (inside && !inside(X[0], X[2]) && !(s === 2 && t === 2)) continue; if (view(q, X, false) > 0) any = true; } if (any) cand.push(i); });
+    const a = new Int16Array(n).fill(-1), b = new Int16Array(n).fill(-1), ua = new Uint16Array(n), va = new Uint16Array(n), ub = new Uint16Array(n), vb = new Uint16Array(n), wb = new Uint8Array(n), uses = new Set();
+    const BS = 8, K = Math.min(4, cand.length), o1 = {}, o2 = {};
+    for (let by = 0; by < h; by += BS) for (let bx = 0; bx < w; bx += BS) {
+      // the few best photos for this block, judged at its centre
+      const Xc = f.P(Math.min(1, (bx + BS / 2) / w), Math.min(1, (by + BS / 2) / h)), top = [];
+      for (const i of cand) { const g = view(prep[i], Xc, true); if (g > 0) top.push([g, i]); }
+      // a block partly outside the photo's frame at its centre: still try every candidate at its texels
+      const pick = top.length ? top.sort((x, y) => y[0] - x[0]).slice(0, K).map(e => e[1]) : cand;
+      for (let j = by; j < Math.min(h, by + BS); j++) for (let i = bx; i < Math.min(w, bx + BS); i++) {
+        const X = f.P((i + 0.5) / w, (j + 0.5) / h), k = j * w + i; if (inside && !inside(X[0], X[2])) continue;
+        let g1 = 0, i1 = -1, g2 = 0, i2 = -1, u1 = 0, v1 = 0, u2 = 0, v2 = 0;
+        for (const pi of pick) {
+          const g = view(prep[pi], X, true, o1); if (!(g > 0)) continue;
+          if (g > g1) { g2 = g1; i2 = i1; u2 = u1; v2 = v1; g1 = g; i1 = pi; u1 = o1.u; v1 = o1.v; }
+          else if (g > g2) { g2 = g; i2 = pi; u2 = o1.u; v2 = o1.v; }
+        }
+        if (i1 < 0 && pick !== cand) for (const pi of cand) { const g = view(prep[pi], X, true, o2); if (g > g1) { g1 = g; i1 = pi; u1 = o2.u; v1 = o2.v; } }
+        if (i1 < 0) continue;
+        a[k] = i1; ua[k] = Math.round(u1 * 65535); va[k] = Math.round(v1 * 65535); uses.add(i1);
+        const s = i2 >= 0 ? Math.pow(g2, 4) / (Math.pow(g1, 4) + Math.pow(g2, 4)) : 0;
+        if (s > 0.08) { b[k] = i2; ub[k] = Math.round(u2 * 65535); vb[k] = Math.round(v2 * 65535); wb[k] = Math.round(s * 255); uses.add(i2); }
+      }
+    }
+    return { name: f.name, kind: f.kind, w, h, a, ua, va, b, ub, vb, wb, uses };
+  }
+  // Paint the texels that photo idx supplies, from its pixels img {data (RGBA), w, h}, times its exposure gain.
+  function paintFromPhoto(src, acc, idx, img, gain = 1) {
+    if (!src.uses.has(idx)) return;
+    const { w, h, a, ua, va, b, ub, vb, wb } = src, W = img.w, H = img.h, D = img.data, rgb = acc.rgb, wt = acc.wt;
+    const add = (k, u, v, m) => {
+      const x = clamp(u / 65535 * W - 0.5, 0, W - 1.001), y = clamp(v / 65535 * H - 0.5, 0, H - 1.001), x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0;
+      const i00 = (y0 * W + x0) * 4, i01 = i00 + 4, i10 = i00 + W * 4, i11 = i10 + 4, w00 = (1 - fx) * (1 - fy), w01 = fx * (1 - fy), w10 = (1 - fx) * fy, w11 = fx * fy, g = m * gain;
+      rgb[k * 3] += g * (D[i00] * w00 + D[i01] * w01 + D[i10] * w10 + D[i11] * w11);
+      rgb[k * 3 + 1] += g * (D[i00 + 1] * w00 + D[i01 + 1] * w01 + D[i10 + 1] * w10 + D[i11 + 1] * w11);
+      rgb[k * 3 + 2] += g * (D[i00 + 2] * w00 + D[i01 + 2] * w01 + D[i10 + 2] * w10 + D[i11 + 2] * w11);
+      wt[k] += m;
+    };
+    for (let k = 0; k < w * h; k++) {
+      if (a[k] === idx) add(k, ua[k], va[k], b[k] >= 0 ? 1 - wb[k] / 255 : 1);
+      if (b[k] === idx) add(k, ub[k], vb[k], wb[k] / 255);
+    }
+  }
+  // Painted texels → RGBA; holes filled from their surroundings (push-pull), faintly dimmed.
+  function finishTexture(src, acc) {
+    const { w, h } = src, n = w * h, rgb = new Float32Array(n * 3), alpha = new Float32Array(n), data = new Uint8ClampedArray(n * 4);
+    for (let k = 0; k < n; k++) if (acc.wt[k] > 1e-6) { const s = 1 / acc.wt[k]; rgb[k * 3] = acc.rgb[k * 3] * s; rgb[k * 3 + 1] = acc.rgb[k * 3 + 1] * s; rgb[k * 3 + 2] = acc.rgb[k * 3 + 2] * s; alpha[k] = 1; }
+    const any = RM.pushPull(rgb, alpha, w, h); let cov = 0;
+    for (let k = 0; k < n; k++) {
+      const a = Math.min(1, alpha[k]), dim = 0.88 + 0.12 * a; if (a > 0.5) cov++;
+      data[k * 4] = any ? rgb[k * 3] * dim : 200; data[k * 4 + 1] = any ? rgb[k * 3 + 1] * dim : 200; data[k * 4 + 2] = any ? rgb[k * 3 + 2] * dim : 200; data[k * 4 + 3] = 255;
+    }
+    return { name: src.name, w, h, data, coverage: cov / n };
   }
   function faceTextures3(room, views, o = {}) { return roomFaces(room).map(f => faceTexture3(room, views, f, o)); }
   function faceTexture3(room, views, f, o = {}) {
@@ -1440,8 +1937,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 
   return {
     DEG, polyArea, pointInPoly, roomFaces, triangulate, DEMO_HOUSE, sceneHit, sceneColor, renderScene, mockDepth,
-    calibrateSpot, rayDistance, spotCloud, depthPanorama, spotStructure, alignSpots, icp2d, rotY, fft2,
-    floorPlan, snapManhattan, simplifyClosed, selfIntersects, spotPanorama, faceTextures3, faceTexture3, roomModel
+    calibrateSpot, parallaxInit, rayDistance, spotCloud, depthPanorama, spotStructure, alignSpots, icp2d, rotY, fft2,
+    floorSamples, floorMatch, moveSamples, joinSamples, spotLayout, profileFrom, layoutProfiles, pooledCeil,
+    floorPlan, snapManhattan, removeJogs, faceSources, paintFromPhoto, finishTexture, simplifyClosed, selfIntersects, spotPanorama, faceTextures3, faceTexture3, roomModel
   };
 });
 </script>
@@ -1750,6 +2248,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // A photo every ROOM_SHOT_DEG of view change (ROOM_SHOT_TILT_DEG while aimed at the floor or ceiling), long
   // side ROOM_FRAME_LONG px; floor photos in ROOM_FLOOR_DIRS of 8 directions; depth maps DEPTH_LONG px long.
   const ROOM_SHOT_DEG = 10, ROOM_SHOT_TILT_DEG = 14, ROOM_FRAME_LONG = 360, ROOM_MAX_FRAMES = 90, ROOM_MAX_SPOTS = 5, ROOM_VIDEO_LAG_MS = 70;
+  // every photo is also kept as a sharper JPEG (long side up to ROOM_HI_LONG) for the textures
+  const ROOM_HI_LONG = 960;
   const ROOM_FLOOR_DIRS = 6, ROOM_CEIL_DIRS = 3, DEPTH_LONG = 128, DEMO_SPEED = 3;
   // Level photos closer than this in heading share a depth map budget (0 = every photo gets one). Thinning
   // was tried: at 15° the floor-anchor check loses its close pairs and a hard spot's error grows ~4×.
@@ -1790,7 +2290,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Every capture and build step, timing, depth-engine attempt, warning and error is written to
   // localStorage the moment it happens, so the log survives iOS killing the tab (a page that runs out of
   // memory is reloaded) and can be copied, downloaded or shared afterwards. No photos go into the log.
-  const VERSION = 'v3.3', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
+  const VERSION = 'v3.4', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
   const LOG = [];
   const getJSON = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } };
   const setJSON = (key, v) => { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { } };
@@ -1988,7 +2488,18 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     if (R.grab.width !== w || R.grab.height !== h) { R.grab.width = w; R.grab.height = h; }
     R.grabCtx.drawImage(v, 0, 0, w, h);
     const q = quatAt(performance.now() - ROOM_VIDEO_LAG_MS);
-    return { data: R.grabCtx.getImageData(0, 0, w, h).data, w, h, q, theta: autoFrameAngle(vw, vh, q), heading: state.zeroHeading || 0, camKind: 'back', t: Date.now() };
+    const fr = { data: R.grabCtx.getImageData(0, 0, w, h).data, w, h, q, theta: autoFrameAngle(vw, vh, q), heading: state.zeroHeading || 0, camKind: 'back', t: Date.now() };
+    // the same video frame, sharper, for the textures (encoded in the background)
+    const kh = Math.min(1, ROOM_HI_LONG / Math.max(vw, vh)), hw = Math.round(vw * kh), hh = Math.round(vh * kh);
+    if (hw > w * 1.2 && R.grabHi !== false) {
+      try {
+        if (!R.grabHi) { R.grabHi = document.createElement('canvas'); R.grabHiCtx = R.grabHi.getContext('2d'); }
+        if (R.grabHi.width !== hw || R.grabHi.height !== hh) { R.grabHi.width = hw; R.grabHi.height = hh; }
+        R.grabHiCtx.drawImage(v, 0, 0, hw, hh);
+        R.grabHi.toBlob(b => { if (b) fr.hiBlob = b; }, 'image/jpeg', 0.85);
+      } catch (e) { R.grabHi = false; logLine('warn', 'sharp photo copies unavailable: ' + fmtArg(e)); }
+    }
+    return fr;
   }
 
   // ---- capture flow: per spot settle → turn → floor → ceiling → done; Next spot / Build any time
@@ -2040,7 +2551,10 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     if (steady && Math.abs(pitch) < 25 * DEG) sp.bins[bin(yaw, 36)] = 1;
     // photos: every few degrees of view change, only while turning slowly enough to stay sharp
     const tilt = Math.abs(pitch) > 28 * DEG, gap = (tilt ? ROOM_SHOT_TILT_DEG : ROOM_SHOT_DEG) * DEG, since = R.lastShot ? angleBetween(fwd, R.lastShot) : Infinity;
-    if (sp.frames.length < ROOM_MAX_FRAMES && steady && (since > gap || (since > 3 * DEG && t - R.shotAt > 2500))) {
+    // floor photos at about 45°: they must also show where the floor meets the walls (that is what ties
+    // the depth of the level photos to the phone height); straight down at your feet they show neither
+    const tooSteep = pitch < -64 * DEG;
+    if (sp.frames.length < ROOM_MAX_FRAMES && steady && !tooSteep && (since > gap || (since > 3 * DEG && t - R.shotAt > 2500))) {
       const f = demo ? demoFrame() : grabFrame();
       if (f) {
         f.spot = sp.index; f.pitch = pitch; sp.frames.push(f);
@@ -2056,7 +2570,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const last = R.spots.length >= ROOM_MAX_SPOTS;
     if (step !== R.step) {
       if (R.step) cue(step === 'done' ? 'done' : 'step');
-      say(step === 'turn' ? 'Now turn slowly on the spot.' : step === 'floor' ? 'Tilt down to the floor and turn around once more.' : step === 'ceiling' ? 'Now look up at the ceiling.'
+      say(step === 'turn' ? 'Now turn slowly on the spot.' : step === 'floor' ? 'Tilt down about forty-five degrees and turn around once more.' : step === 'ceiling' ? 'Now look up at the ceiling.'
         : last ? 'Spot done. Tap build.' : 'Spot done. Walk to another spot and tap next spot, or tap build.');
       R.step = step;
       logLine('info', `spot ${sp.index + 1}: step ${step}`, { photos: sp.frames.length, floorDirs: floorN, ceilDirs: ceilN }, false);
@@ -2064,12 +2578,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     }
     const slow = !steady ? 'slower please — photos need a steady phone' : '';
     if (step === 'turn') setPrompt('TURN SLOWLY ↻', slow || `${Math.round(turn * 100)}% of the circle`);
-    else if (step === 'floor') setPrompt('TILT DOWN TO THE FLOOR ↓', slow || 'and turn around once more');
+    else if (step === 'floor') setPrompt(tooSteep ? 'NOT SO STEEP ↑' : 'TILT DOWN ABOUT 45° ↓', slow || (tooSteep ? 'tilt up until the far floor shows' : 'and turn around once more'));
     else if (step === 'ceiling') setPrompt('LOOK UP AT THE CEILING ↑', slow || 'a few directions (optional)');
     else setPrompt(`SPOT ${sp.index + 1} DONE ✓`, last ? 'tap Build room' : demo ? 'walking to the next spot…' : 'walk 2–3 m and tap Next spot — or Build room');
     if (step === 'ceiling') hint('The ceiling is optional: Next spot and Build room work now.');
     else if (step === 'done') hint(last ? 'That is the most spots for one room.' : 'Next spot: walk to another part of the room first.');
-    else if (step === 'floor') hint('Tilt the phone down until most of the screen is floor.');
+    else if (step === 'floor') hint(tooSteep ? 'Too steep: the photos need the floor out to the walls, not just your feet.' : 'About 45° down — the floor should reach the top half of the screen.');
     else hint('');
     updateMeters(turn, turnOk, floorN, ceilN);
   }
@@ -2123,7 +2637,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       if (!demo) {
         if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
           throw Error('The camera is only available over HTTPS (not inside a sandboxed preview).');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } } });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 }, aspectRatio: { ideal: 4 / 3 } } });
         if (!R.capturing) { for (const t of stream.getTracks()) t.stop(); return; } // cancelled while the camera was starting
         R.stream = stream; R.videoReady = false; ui.liveVideo.srcObject = R.stream;
         try { await ui.liveVideo.play(); } catch (e) { console.warn('Camera preview did not start', e); }
@@ -2256,7 +2770,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
   function memMB() {
     const R = ROOM; let b = 0;
-    for (const f of allFrames()) b += (f.data ? f.data.byteLength : 0) + (f.disp ? f.disp.byteLength : 0) + (f.jpeg ? f.jpeg.byteLength : 0);
+    for (const f of allFrames()) b += (f.data ? f.data.byteLength : 0) + (f.disp ? f.disp.byteLength : 0) + (f.jpeg ? f.jpeg.byteLength : 0) + (f.hiJpeg ? f.hiJpeg.byteLength : f.hiBlob ? f.hiBlob.size : 0);
     const B = R.build; if (B) { for (const sp of B.spots3) if (sp.cloud) b += sp.cloud.pos.byteLength + sp.cloud.col.byteLength; if (B.views) for (const v of B.views) if (v.pano) b += v.pano.data.byteLength; }
     const o = { ourDataMB: Math.round(b / 1e6) }, w = DE.wasmHeapMB ? DE.wasmHeapMB() : 0;
     if (w) o.wasmMB = w; // the depth runtime's heap (it only grows)
@@ -2341,20 +2855,26 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         setBuildProgress(P + (1 - P) * 0.4 * k / spots.length, `calibrating depth · spot ${k + 1}/${spots.length}`);
         buildStep(`calibrating spot ${k + 1}/${spots.length}`, { photos: spots[k].frames.length }); await nextFrame(); checkCancel();
         const tk = performance.now();
-        const framesAll = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, rgba: f.data, cw: f.w, ch: f.h }; });
+        const framesAll = spots[k].frames.map(f => { const cam = frameCam(f); return { cam, pos: f.pos || RM.phonePos(cam, arm), fov: f.fov || camFov(), disp: f.disp, dw: f.dw, dh: f.dh, rgba: f.data, cw: f.w, ch: f.h, src: f }; });
         const frames = framesAll.filter(f => f.disp); // calibration and depth points: the photos with depth maps
         const cal = S3.calibrateSpot(frames, camH);
         logLine('info', `spot ${k + 1} calibrated in ${Math.round(performance.now() - tk)} ms`, { floorPhotos: cal.floorPhotos, droppedAnchors: cal.droppedAnchors, rows: cal.rows, floorRows: cal.floorRows });
         if (!cal.floorPhotos) { skipped.push(spots[k].index + 1); logLine('warn', `spot ${k + 1}: no floor found in its downward photos — left out`); continue; }
         const cloud = S3.spotCloud(frames, cal.cal), st = S3.spotStructure(cloud, camH);
-        logLine('info', `spot ${k + 1}: ${cloud.n} depth points, ceiling ${st.ceil ? st.ceil.toFixed(2) + ' m' : 'not seen'}`);
-        used.push({ frames, framesAll, cal, cloud, ceil: st.ceil, prof: st.prof, camHeight: camH, index: spots[k].index, photos: framesAll.length });
+        // walls and ceiling from where floor, walls and ceiling meet (exact angles + phone height); the
+        // depth-only structure fills directions where no such line was seen
+        const lay = S3.spotLayout(frames, cal.cal, camH, { fallback: st, fallbackCeil: st.ceil }), floor = S3.floorSamples(frames, cal.cal, camH);
+        logLine('info', `spot ${k + 1}: ${cloud.n} depth points; ceiling ${lay.ceil ? lay.ceil.toFixed(2) + ' m' : 'not seen'} from ${lay.fulls.length} full-height wall lines (depth alone: ${st.ceil ? st.ceil.toFixed(2) + ' m' : '—'}); walls measured in ${Math.round(100 * lay.seen)}% of directions; ${floor.n} floor samples`);
+        // the wall lines decide where they were seen in enough directions; otherwise the depth profile stays
+        const good = lay.seen >= 0.4;
+        used.push({ frames, framesAll, cal, cloud, ceil: lay.ceil || st.ceil, prof: good ? lay.prof : st.prof, sightings: good ? lay.sightings : null, fulls: lay.fulls, fallbackProf: st.prof, floor, camHeight: camH, index: spots[k].index, photos: framesAll.length });
       }
       if (!used.length) throw Error('the floor could not be found in the photos aimed down, so the scale is unknown. Tilt further down (about 45°) so most of each floor photo shows floor, in good light');
-      setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by their walls' : 'tracing the walls');
+      setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by the floor they share' : 'tracing the walls');
       buildStep(used.length > 1 ? 'aligning spots' : 'single spot'); await nextFrame(); checkCancel();
       const poses = used.length > 1 ? S3.alignSpots(used, { yawSpan: 8 }) : [{ x: 0, z: 0, yaw: 0 }];
-      if (used.length > 1) logLine('info', 'spot poses', poses.map(p => ({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), yawDeg: +(p.yaw / DEG).toFixed(1) })));
+      if (used.length > 1) logLine('info', 'spot poses', poses.map(p => Object.assign({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), yawDeg: +(p.yaw / DEG).toFixed(1), by: p.method }, p.floorScore != null ? { floorMatch: p.floorScore, floorCoarse: p.floorCoarse, nextBest: p.floorSecond, sharedFloorM2: p.floorOverlapM2, wallsSaid: p.wallsPose } : {})));
+      if (used.length > 1) { const pr = S3.layoutProfiles(used, poses); used.forEach((u, k) => { u.prof = pr[k]; }); }
       R.build = { spots3: used, poses, camH, arm, skipped, scale: 1, ceilOverride: null, views: null };
       R.insideSpot = 0;
       if (!await finishModel((f, sub) => setBuildProgress(P + (1 - P) * (0.5 + 0.5 * f), sub), true)) return;
@@ -2381,6 +2901,25 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       if (!ok) setTimeout(() => ui.message.scrollIntoView({ block: 'center', behavior: 'smooth' }), 50);
     }
   }
+  // A photo's pixels for the textures: its sharp copy when the capture has one (decoded on demand, one
+  // at a time), else the small frame.
+  const pix = { c: null, x: null };
+  async function photoPixels(p) {
+    const f = p.src, blob = f && !ROOM.lowMem ? f.hiBlob || (f.hiJpeg && new Blob([f.hiJpeg], { type: 'image/jpeg' })) : null;
+    if (blob && typeof createImageBitmap === 'function') {
+      try {
+        const bmp = await createImageBitmap(blob), w = bmp.width, h = bmp.height;
+        if (w > p.cw && Math.abs(w / h - p.cw / p.ch) < 0.02) {
+          if (!pix.c) { pix.c = document.createElement('canvas'); pix.x = pix.c.getContext('2d', { willReadFrequently: true }); }
+          if (pix.c.width !== w || pix.c.height !== h) { pix.c.width = w; pix.c.height = h; }
+          pix.x.drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
+          return { data: pix.x.getImageData(0, 0, w, h).data, w, h };
+        }
+        if (bmp.close) bmp.close();
+      } catch (e) { console.warn('sharp photo unreadable', e); }
+    }
+    return { data: p.rgba, w: p.cw, h: p.ch };
+  }
   // Floor plan, textures and model from the calibrated spots (re-run by "straight walls" and the ceiling).
   async function finishModel(prog, logSteps = false) {
     const R = ROOM, B = R.build, seq = ++R.rebuildSeq; if (!B) return false;
@@ -2388,27 +2927,41 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     step('floor plan');
     const plan = S3.floorPlan(B.spots3, B.poses, { snap: ui.straightWalls.checked });
     if (logSteps) logLine('info', `floor plan: ${plan.poly.length} corners, ${plan.area ? plan.area.toFixed(2) : '?'} m², ${plan.snapped ? 'straightened' : 'as measured'}`);
-    const ceils = B.spots3.map(sp => sp.ceil).filter(Boolean).sort((a, b) => a - b);
-    const height = B.ceilOverride != null ? B.ceilOverride / B.scale : ceils.length ? ceils[ceils.length >> 1] : 2.45;
+    const height = B.ceilOverride != null ? B.ceilOverride / B.scale : S3.pooledCeil(B.spots3, 2.45);
     const base = { poly: plan.poly, height, camHeight: B.camH, spots: B.poses.map(p => ({ x: p.x, z: p.z, yaw: p.yaw })) };
-    const PW = R.lowMem ? 1024 : 1536, TEX = R.lowMem ? 56 : 80;
-    if (!B.views) {
+    const PW = R.lowMem ? 1024 : 1536, TEX = R.lowMem ? 70 : 120, MAXS = R.lowMem ? 512 : 1024;
+    if (!B.views) { // per-spot panoramas: the 360° view, and each photo's exposure relative to its neighbours
       B.views = [];
       for (let k = 0; k < B.spots3.length; k++) {
-        if (prog) prog(0.4 * k / B.spots3.length, `stitching photos · spot ${k + 1}/${B.spots3.length}`);
+        if (prog) prog(0.3 * k / B.spots3.length, `stitching photos · spot ${k + 1}/${B.spots3.length}`);
         step(`stitching spot ${k + 1}/${B.spots3.length}`, { panorama: `${PW}x${PW / 2}` }); await nextFrame(); checkCancel();
         const sp = B.spots3[k], depth = S3.depthPanorama(sp.cloud, 360, 180), pano = S3.spotPanorama(sp.framesAll || sp.frames, depth, sp.frames[0].fov, PW, PW / 2);
-        B.views.push({ depth, pano: pano.image, coverage: pano.coverage });
+        B.views.push({ depth, pano: pano.image, coverage: pano.coverage, gains: pano.gains });
       }
     }
-    const faces = S3.roomFaces(base), tex = [];
+    // textures straight from the photos: each texel from the photo that sees it best (sharp copies when
+    // the capture has them)
+    const faces = S3.roomFaces(base), photos = [];
+    B.spots3.forEach((sp, k) => sp.frames.forEach((f, i) => photos.push({ spot: k, cam: f.cam, pos: f.pos, fov: f.fov, disp: f.disp, dw: f.dw, dh: f.dh, cal: sp.cal.cal[i], rgba: f.rgba, cw: f.cw, ch: f.ch, src: f.src, gain: (B.views[k].gains && B.views[k].gains.get(f)) || 1 })));
+    const srcs = [], tp0 = performance.now();
     for (let i = 0; i < faces.length; i++) {
-      if (prog) prog(0.4 + 0.6 * i / faces.length, `texturing ${faces[i].kind === 'wall' ? 'walls' : faces[i].kind} · ${i + 1}/${faces.length}`);
+      if (prog) prog(0.3 + 0.35 * i / faces.length, `texturing ${faces[i].kind === 'wall' ? 'walls' : faces[i].kind} · ${i + 1}/${faces.length}`);
       if (logSteps && (i === 0 || faces[i].kind !== 'wall')) step(`texturing ${faces[i].kind === 'wall' ? 'walls' : faces[i].kind} (${i + 1}/${faces.length})`, { res: TEX });
       await nextFrame(); if (seq !== R.rebuildSeq) return false; // superseded by a newer request
       if (logSteps) checkCancel();
-      tex.push(S3.faceTexture3(base, B.views, faces[i], { res: TEX }));
+      srcs.push(S3.faceSources(base, photos, faces[i], { res: TEX, maxSide: MAXS }));
     }
+    const acc = srcs.map(sc => ({ rgb: new Float32Array(sc.w * sc.h * 3), wt: new Float32Array(sc.w * sc.h) }));
+    let painted = 0, sharp = 0;
+    for (let p = 0; p < photos.length; p++) {
+      if (!srcs.some(sc => sc.uses.has(p))) continue;
+      if (painted % 6 === 0) { if (prog) prog(0.65 + 0.35 * p / photos.length, `painting from the photos · ${p + 1}/${photos.length}`); await nextFrame(); if (seq !== R.rebuildSeq) return false; if (logSteps) checkCancel(); }
+      const img = await photoPixels(photos[p]); if (img.w > photos[p].cw) sharp++;
+      for (let i = 0; i < srcs.length; i++) S3.paintFromPhoto(srcs[i], acc[i], p, img, photos[p].gain);
+      painted++;
+    }
+    const tex = srcs.map((sc, i) => S3.finishTexture(sc, acc[i]));
+    if (logSteps) logLine('info', `textures: ${tex.reduce((a, t) => a + t.w * t.h, 0)} texels at ${TEX} px/m from ${painted} photos (${sharp} sharp copies) in ${((performance.now() - tp0) / 1000).toFixed(1)} s`);
     step('showing the model');
     R.plan = plan; R.baseRoom = base; R.tex = tex;
     applyScale();
@@ -2563,9 +3116,10 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     let i = 0;
     for (const sp of R.spots) for (const f of sp.frames) {
       const id = String(i++).padStart(3, '0'), name = `frames/${id}.jpg`;
-      if (!f.jpeg) f.jpeg = new Uint8Array(await (await rgbaToPng(f, 'image/jpeg', 0.9)).arrayBuffer()); // encoded once, reused
-      files.push({ name, data: f.jpeg });
-      const fm = { file: name, w: f.w, h: f.h, spot: sp.index, pitch: f.pitch ?? null, q: f.q || null, theta: f.theta ?? null, heading: f.heading ?? null, camKind: f.camKind || 'back', cam: f.cam || null, pos: f.pos || null, fov: f.fov || null };
+      if (f.hiBlob && !f.hiJpeg) f.hiJpeg = new Uint8Array(await f.hiBlob.arrayBuffer());
+      if (!f.hiJpeg && !f.jpeg) f.jpeg = new Uint8Array(await (await rgbaToPng(f, 'image/jpeg', 0.9)).arrayBuffer()); // encoded once, reused
+      files.push({ name, data: f.hiJpeg || f.jpeg }); // the sharp copy when there is one: readers scale it to w × h
+      const fm = { file: name, w: f.w, h: f.h, sharp: !!f.hiJpeg, spot: sp.index, pitch: f.pitch ?? null, q: f.q || null, theta: f.theta ?? null, heading: f.heading ?? null, camKind: f.camKind || 'back', cam: f.cam || null, pos: f.pos || null, fov: f.fov || null };
       if (f.disp) { const dn = `depth/${id}.f32`; files.push({ name: dn, data: new Uint8Array(f.disp.buffer, f.disp.byteOffset, f.disp.byteLength) }); fm.depth = { file: dn, w: f.dw, h: f.dh }; }
       meta.frames.push(fm);
     }
@@ -2631,7 +3185,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     if (!b || (b.state !== 'running' && b.state !== 'capturing' && b.state !== 'engine')) return;
     const what = b.state === 'capturing' ? 'during a capture' : b.state === 'engine' ? 'while starting the AI depth engine' : `while building, at “${b.step}”`;
     logLine('error', `the previous session ended unexpectedly ${what}`, b);
-    if (b.state !== 'capturing') setJSON(RECOVER_KEY, { cpu: /depth/.test(b.step || '') && /GPU/.test(b.engine || ''), lowMem: b.state === 'running', from: b.step, t: Date.now() });
+    // after a crash in the GPU depth step the CPU engine is the remedy; the later steps keep full quality
+    if (b.state !== 'capturing') { const gpuDepth = /depth/.test(b.step || '') && /GPU/.test(b.engine || ''); setJSON(RECOVER_KEY, { cpu: gpuDepth, lowMem: b.state === 'running' && !gpuDepth, from: b.step, t: Date.now() }); }
     ui.crashBanner.hidden = false;
     setText('crashTitle', b.state === 'capturing' ? 'The last capture stopped unexpectedly' : b.state === 'engine' ? 'The AI depth engine didn’t start' : 'The last room build didn’t finish');
     setText('crashText', `The page stopped ${what} (${new Date(b.t).toLocaleTimeString()}). On a phone this usually means it ran out of memory and Safari reloaded the page. ` +
@@ -2657,10 +3212,11 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       const c = document.createElement('canvas'), cx = c.getContext('2d', { willReadFrequently: true });
       for (const fm of meta.frames || []) {
         const bytes = z[fm.file]; if (!bytes) continue;
-        const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
+        const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' })), sharp = bmp.width > fm.w * 1.2;
         if (c.width !== fm.w || c.height !== fm.h) { c.width = fm.w; c.height = fm.h; }
         cx.drawImage(bmp, 0, 0, fm.w, fm.h); if (bmp.close) bmp.close();
-        const f = { data: cx.getImageData(0, 0, fm.w, fm.h).data, w: fm.w, h: fm.h, q: fm.q, theta: fm.theta, heading: fm.heading, camKind: fm.camKind || (v1 ? 'selfie' : 'back'), jpeg: bytes };
+        const f = { data: cx.getImageData(0, 0, fm.w, fm.h).data, w: fm.w, h: fm.h, q: fm.q, theta: fm.theta, heading: fm.heading, camKind: fm.camKind || (v1 ? 'selfie' : 'back') };
+        if (sharp) f.hiJpeg = bytes; else f.jpeg = bytes;
         if (fm.cam) f.cam = fm.cam; if (fm.pos) f.pos = fm.pos; if (fm.fov) f.fov = fm.fov;
         if (fm.depth && z[fm.depth.file]) { const raw = z[fm.depth.file]; f.disp = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); f.dw = fm.depth.w; f.dh = fm.depth.h; }
         const fw = frameCam(f).fwd, pitch = fm.pitch ?? Math.asin(clamp(fw[1], -1, 1)), yaw = Math.atan2(fw[0], -fw[2]);
