@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoScope">
 <link rel="icon" href="data:,">
-<title>EchoScope | AI room capture · v3.6</title>
+<title>EchoScope | AI room capture · v3.7</title>
 <style>
 :root{--bg:#06111d;--card:#0b1a2a;--card2:#0e2133;--line:#1d3a4f;--text:#e7f4fb;--muted:#8fb0c4;--accent:#3ce5c5;--accent2:#24c6db;--warn:#f4bd70;--err:#f08991;--bar-pad:12px}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
@@ -109,7 +109,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 </head>
 <body>
 <div class="app">
- <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.6</span></header>
+ <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.7</span></header>
  <div class="banner" id="crashBanner" hidden><b id="crashTitle">The last room build didn’t finish</b><p id="crashText"></p>
   <div class="tools"><button class="btn primary" id="crashRebuildBtn" type="button">Rebuild the saved capture</button><button class="btn" id="crashCopyBtn" type="button">Copy log</button><button class="btn" id="crashLogBtn" type="button">Download log</button><button class="btn" id="crashCapBtn" type="button">Download capture</button><button class="btn ghost" id="crashCloseBtn" type="button">Dismiss</button></div></div>
  <main class="layout">
@@ -1429,7 +1429,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
   // 2-D ICP (trimmed point-to-point). Transform p → rotY(yaw)·p + (x, z); each step finds the rotation
   // and shift (Kabsch) taking the current points onto their nearest targets and composes it on.
-  function icp2d(src, dst, pose, iters = 25) {
+  function icp2d(src, dst, pose, iters = 25, fixYaw = false) {
     const cell = 0.12, grid = new Map(), key = (gx, gz) => gx * 73856093 ^ gz * 19349663;
     for (const p of dst) { const k = key(Math.floor(p[0] / cell), Math.floor(p[1] / cell)); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(p); }
     let tx = pose.x, tz = pose.z, yaw = pose.yaw;
@@ -1449,7 +1449,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       let mx = 0, mz = 0, nx = 0, nz = 0; for (const p of keep) { mx += p[0]; mz += p[1]; nx += p[2]; nz += p[3]; }
       mx /= keep.length; mz /= keep.length; nx /= keep.length; nz /= keep.length;
       let sd = 0, sc = 0; for (const p of keep) { const ax = p[0] - mx, az = p[1] - mz, bx = p[2] - nx, bz = p[3] - nz; sd += ax * bx + az * bz; sc += ax * bz - az * bx; }
-      const da = Math.atan2(sc, sd), m = rotY(mx, mz, da), dtx = nx - m[0], dtz = nz - m[1], t2 = rotY(tx, tz, da);
+      const da = fixYaw ? 0 : Math.atan2(sc, sd), m = rotY(mx, mz, da), dtx = nx - m[0], dtz = nz - m[1], t2 = rotY(tx, tz, da);
       yaw += da; tx = t2[0] + dtx; tz = t2[1] + dtz;
       if (Math.abs(da) < 1e-5 && Math.hypot(dtx, dtz) < 1e-4) break;
     }
@@ -1518,7 +1518,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // → {x, z, yaw, score (0–1), second (best score at least 30 cm away), overlap (m²)}
   function floorMatch(A, B, o = {}) {
     const N = o.N || 256, cell = o.cell || 0.06, r = o.r ?? 3, NN = N * N, maxShift = Math.round((o.maxShift ?? 5) / cell), minOv = (o.minOverlap ?? 1.2) / (cell * cell);
-    const yaws = []; for (let d = -(o.yawSpan ?? 8); d <= (o.yawSpan ?? 8) + 1e-9; d += o.yawStep ?? 1) yaws.push(d * DEG);
+    const yaws = []; for (let d = -(o.yawSpan ?? 8); d <= (o.yawSpan ?? 8) + 1e-9; d += o.yawStep ?? 1) yaws.push((o.yaw0 || 0) + d * DEG);
     const FT = arr => { const re = Float64Array.from(arr), im = new Float64Array(NN); fft2(re, im, N, false); return [re, im]; };
     const corr = (X, Y) => { const re = new Float64Array(NN), im = new Float64Array(NN); for (let q = 0; q < NN; q++) { re[q] = X[0][q] * Y[0][q] + X[1][q] * Y[1][q]; im[q] = X[1][q] * Y[0][q] - X[0][q] * Y[1][q]; } fft2(re, im, N, true); return re; };
     const a = floorRaster(A, { x: 0, z: 0, yaw: 0 }, N, cell, r), FA = FT(a.v), FmA = FT(a.m), FA2 = FT(a.v.map(x => x * x));
@@ -1576,10 +1576,17 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const useSight = o.sightings !== false && spots.every(s => sightOf(s) && sightOf(s).length >= (o.minSightings ?? 300));
     const wp = spots.map(s => useSight ? fromSight(s) : wallPoints(s.cloud, s.camHeight, s.ceil)), fl = spots.map(s => s.floor && s.floor.n > 2000 ? s.floor : null);
     let target = wp[0].slice(); const ftarget = fl[0] ? [fl[0]] : [];
+    // Heading between spots from the lines in their photos: each spot's photos give the room's main
+    // direction in that spot's own frame (lineHist), so the turn between two spots is known mod 90° — and
+    // the motion sensors' drift between spots is far below 45°. Used when both are clear and the drift
+    // it implies is plausible: the search then looks only a few degrees around it.
+    const dirOf = s => { const r = s.lines ? linesPhi([s.lines], [{ yaw: 0 }]) : null; return r && r.strength >= (o.minLineStrength ?? 2.5) ? r.phi : null; }, dir0 = dirOf(spots[0]);
     for (let k = 1; k < spots.length; k++) {
       const A = occupancy(target, { x: 0, z: 0, yaw: 0 }, N, cell), Are = Float64Array.from(A), Aim = new Float64Array(N * N); fft2(Are, Aim, N, false);
-      let best = null;
-      for (let dy = -(o.yawSpan ?? 5); dy <= (o.yawSpan ?? 5); dy += 1) {
+      let best = null, prior = null; const dk = dir0 != null ? dirOf(spots[k]) : null;
+      if (dk != null && o.linePrior !== false) { let d = dir0 - dk; d -= Math.round(d / (Math.PI / 2)) * (Math.PI / 2); if (Math.abs(d) <= (o.maxDrift ?? 10) * DEG) prior = d; }
+      const ySpan = prior != null ? (o.priorSpan ?? 2.5) : (o.yawSpan ?? 5), yStep = prior != null ? 0.5 : 1, y0 = prior != null ? prior / DEG : 0;
+      for (let dy = y0 - ySpan; dy <= y0 + ySpan + 1e-9; dy += yStep) {
         const B = occupancy(wp[k], { x: 0, z: 0, yaw: dy * DEG }, N, cell), Bre = Float64Array.from(B), Bim = new Float64Array(N * N); fft2(Bre, Bim, N, false);
         // cross-correlation: IFFT(A · conj(B)) peaks at the shift moving B onto A
         for (let q = 0; q < N * N; q++) { const r = Are[q] * Bre[q] + Aim[q] * Bim[q], i = Aim[q] * Bre[q] - Are[q] * Bim[q]; Bre[q] = r; Bim[q] = i; }
@@ -1590,10 +1597,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           if (!best || v > best.v) best = { v, x: sx * cell, z: sz * cell, yaw: dy * DEG };
         }
       }
-      let pose = Object.assign(icp2d(wp[k], target, best, 30), { method: useSight ? 'wall lines' : 'walls' });
+      let pose = icp2d(wp[k], target, best, 30);
+      if (prior != null && Math.abs(pose.yaw - prior) > (o.priorSpan ?? 2.5) * DEG + 0.01) pose = icp2d(wp[k], target, best, 30, true); // keep the heading the lines say
+      pose = Object.assign(pose, { method: useSight ? 'wall lines' : 'walls' }, prior != null ? { linesYaw: +(prior / DEG).toFixed(2) } : null);
       // The shared floor decides when its match is clear: a strong peak, well above any other place.
       if (fl[k] && ftarget.length && o.floor !== false) {
-        const m = floorMatch(joinSamples(ftarget), fl[k], { yawSpan: o.yawSpan ?? 8 });
+        const m = floorMatch(joinSamples(ftarget), fl[k], prior != null ? { yaw0: prior, yawSpan: o.priorSpan ?? 2.5, yawStep: 0.5 } : { yawSpan: o.yawSpan ?? 8 });
         if (m) {
           const info = { floorScore: +m.score.toFixed(3), floorCoarse: +m.coarse.toFixed(3), floorSecond: +m.second.toFixed(3), floorOverlapM2: +m.overlap.toFixed(1), wallsPose: { x: +pose.x.toFixed(2), z: +pose.z.toFixed(2), yawDeg: +(pose.yaw / DEG).toFixed(1) } };
           if (m.coarse >= (o.floorMin ?? 0.15) && m.coarse - m.second >= (o.floorGap ?? 0.03) && m.overlap >= (o.floorOverlap ?? 1.5)) pose = Object.assign({ x: m.x, z: m.z, yaw: m.yaw, method: 'floor' }, info);
@@ -1747,6 +1756,337 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     }
     return P;
   }
+  // ---------------------------------------------------------------------------------------------
+  // Walls as planes. Rooms have flat walls meeting at right angles, so instead of tracing the edge of the
+  // free space (which carries every wobble of the depth into the outline), the outline is assembled from
+  // wall LINES: where the evidence — the lines where floor or ceiling met a wall, from every spot, and,
+  // weakly, the traced edge of the free space — lines up along the room's two main directions. Those lines
+  // cut the plan into rectangular cells, and each cell is inside or outside the room: a minimum cut picks
+  // the labelling that best matches the free space the spots saw, where outline costs a little per metre
+  // along a wall that was seen and a lot where none was. A box room comes out a box, an L an L.
+  // ---------------------------------------------------------------------------------------------
+  function minCut(n, s, t, E) { // E: [a, b, cap a→b, cap b→a] → Uint8Array, 1 on the source side (Dinic)
+    const head = new Int32Array(n).fill(-1), to = [], cap = [], nxt = [];
+    const add = (a, b, c) => { to.push(b); cap.push(c); nxt.push(head[a]); head[a] = to.length - 1; };
+    for (const [a, b, c1, c2] of E) { add(a, b, c1); add(b, a, c2); }
+    const level = new Int32Array(n), it = new Int32Array(n), EPS = 1e-12;
+    const bfs = () => { level.fill(-1); level[s] = 0; const q = [s]; for (let qi = 0; qi < q.length; qi++) { const v = q[qi]; for (let e = head[v]; e >= 0; e = nxt[e]) if (cap[e] > EPS && level[to[e]] < 0) { level[to[e]] = level[v] + 1; q.push(to[e]); } } return level[t] >= 0; };
+    const dfs = (v, f) => { if (v === t) return f; for (; it[v] >= 0; it[v] = nxt[it[v]]) { const e = it[v], w = to[e]; if (cap[e] > EPS && level[w] === level[v] + 1) { const d = dfs(w, Math.min(f, cap[e])); if (d > EPS) { cap[e] -= d; cap[e ^ 1] += d; return d; } } } return 0; };
+    for (let round = 0; round < 10000 && bfs(); round++) { it.set(head); while (dfs(s, Infinity) > EPS); }
+    const side = new Uint8Array(n), q = [s]; side[s] = 1;
+    for (let qi = 0; qi < q.length; qi++) { const v = q[qi]; for (let e = head[v]; e >= 0; e = nxt[e]) if (cap[e] > EPS && !side[to[e]]) { side[to[e]] = 1; q.push(to[e]); } }
+    return side;
+  }
+  // Direction of the line through each point's neighbours within r (0…π from the first axis), NaN where
+  // they do not form one (too few, or spread out rather than along a line).
+  function localDirs(P, r = 0.3, minNb = 5, lin = 0.08) {
+    const hash = new Map(), key = (a, b) => a * 100003 + b, out = new Float64Array(P.length).fill(NaN);
+    P.forEach((p, i) => { const k = key(Math.floor(p[0] / r), Math.floor(p[1] / r)); let L = hash.get(k); if (!L) hash.set(k, L = []); L.push(i); });
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i], gu = Math.floor(p[0] / r), gv = Math.floor(p[1] / r); let n = 0, su = 0, sv = 0, suu = 0, svv = 0, suv = 0;
+      for (let du = -1; du <= 1; du++) for (let dv = -1; dv <= 1; dv++) { const L = hash.get(key(gu + du, gv + dv)); if (!L) continue; for (const j of L) { const a = P[j][0] - p[0], b = P[j][1] - p[1]; if (a * a + b * b > r * r) continue; n++; su += a; sv += b; suu += a * a; svv += b * b; suv += a * b; } }
+      if (n < minNb) continue;
+      const mu = su / n, mv = sv / n, cuu = suu / n - mu * mu, cvv = svv / n - mv * mv, cuv = suv / n - mu * mv;
+      const h = Math.sqrt(Math.max(0, (cuu - cvv) ** 2 / 4 + cuv * cuv)), l1 = (cuu + cvv) / 2 + h, l2 = (cuu + cvv) / 2 - h;
+      if (!(l1 > 1e-6) || l2 / l1 > lin) continue;
+      out[i] = (0.5 * Math.atan2(2 * cuv, cuu - cvv) + Math.PI) % Math.PI;
+    }
+    return out;
+  }
+  // The room's main direction (0–90°) from wall evidence [{x, z, w}]: the turn at which the points, projected
+  // onto the two axes, pile up most sharply (walls along the axes become narrow peaks). It integrates whole
+  // walls, so it holds up where local pieces are noisy. null if there is too little evidence.
+  function evidencePhi(evid, o = {}) {
+    let tot = 0, R = 0; for (const e of evid) { tot += e.w; R = Math.max(R, Math.hypot(e.x, e.z)); }
+    if (tot < (o.minPhiVotes ?? 40) || !(R > 0)) return null;
+    const B = o.phiBin ?? 0.04, nb = Math.ceil(2 * R / B) + 3, hu = new Float64Array(nb), hv = new Float64Array(nb);
+    const score = phi => {
+      const c = Math.cos(phi), s = Math.sin(phi); hu.fill(0); hv.fill(0);
+      for (const e of evid) {
+        const u = (e.x * c + e.z * s + R) / B, v = (-e.x * s + e.z * c + R) / B, iu = Math.floor(u), iv = Math.floor(v), fu = u - iu, fv = v - iv;
+        hu[iu] += e.w * (1 - fu); hu[iu + 1] += e.w * fu; hv[iv] += e.w * (1 - fv); hv[iv + 1] += e.w * fv;
+      }
+      let q = 0; for (let k = 0; k < nb; k++) q += hu[k] * hu[k] + hv[k] * hv[k]; return q;
+    };
+    let best = -1, bp = 0;
+    for (let d = 0; d < 90; d += 0.5) { const sc = score(d * DEG); if (sc > best) { best = sc; bp = d; } }
+    const c0 = bp; for (let d = c0 - 0.5; d <= c0 + 0.5 + 1e-9; d += 0.1) { const sc = score(d * DEG); if (sc > best) { best = sc; bp = d; } }
+    return ((bp % 90) + 90) % 90 * DEG;
+  }
+  // Directions of horizontal lines in the photos. Every strong edge is taken as part of a horizontal line in
+  // the room: the plane through it and the camera, met with the horizontal, gives the line's direction —
+  // gravity is known, depth is not needed. Baseboards, crown moulding, cabinet and table edges, door heads
+  // and floorboards mostly follow the walls, so the votes (mod 90°) peak at the room's main direction.
+  // Edges whose plane is nearly vertical (upright lines) or nearly horizontal (lines at eye level, whose
+  // direction is ill-defined) do not vote. → Float64Array(360): quarter-degree bins over 0–90°, spot frame
+  function lineHist(frames, o = {}) {
+    const hist = new Float64Array(360), step = o.step || 2, thr = o.thr ?? 40, minCoh = o.minCoh ?? 0.75;
+    for (const f of frames) {
+      const img = f.rgba, w = f.cw, h = f.ch; if (!img || !w) continue;
+      const L = new Float32Array(w * h), Jxx = new Float32Array(w * h), Jxy = new Float32Array(w * h), Jyy = new Float32Array(w * h);
+      for (let k = 0; k < w * h; k++) L[k] = 0.299 * img[4 * k] + 0.587 * img[4 * k + 1] + 0.114 * img[4 * k + 2];
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const k = y * w + x;
+        const gx = L[k - w + 1] + 2 * L[k + 1] + L[k + w + 1] - L[k - w - 1] - 2 * L[k - 1] - L[k + w - 1];
+        const gy = L[k + w - 1] + 2 * L[k + w] + L[k + w + 1] - L[k - w - 1] - 2 * L[k - w] - L[k - w + 1];
+        Jxx[k] = gx * gx; Jxy[k] = gx * gy; Jyy[k] = gy * gy;
+      }
+      // structure tensor over 5×5: the edge's orientation from its surroundings, and how line-like it is
+      const box = A => { // separable 5×5 box sum
+        const T = new Float32Array(w * h), B = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) { const row = y * w; let s = 0; for (let x = 0; x < Math.min(w, 3); x++) s += A[row + x]; for (let x = 0; x < w; x++) { T[row + x] = s; if (x - 2 >= 0) s -= A[row + x - 2]; if (x + 3 < w) s += A[row + x + 3]; } }
+        for (let x = 0; x < w; x++) { let s = 0; for (let y = 0; y < Math.min(h, 3); y++) s += T[y * w + x]; for (let y = 0; y < h; y++) { B[y * w + x] = s; if (y - 2 >= 0) s -= T[(y - 2) * w + x]; if (y + 3 < h) s += T[(y + 3) * w + x]; } }
+        return B;
+      };
+      const Sxx = box(Jxx), Sxy = box(Jxy), Syy = box(Jyy);
+      for (let y = 3; y < h - 3; y += step) for (let x = 3; x < w - 3; x += step) {
+        const k = y * w + x, a = Sxx[k], b = Sxy[k], c = Syy[k], tr = a + c; if (!(tr > 25 * thr * thr)) continue;
+        const coh = Math.sqrt((a - c) * (a - c) + 4 * b * b) / tr; if (coh < minCoh) continue;
+        const ga = 0.5 * Math.atan2(2 * b, a - c), tx = -Math.sin(ga), ty = Math.cos(ga); // along the edge
+        const r1 = RM.camRay(f.cam, w, h, f.fov, x, y), r2 = RM.camRay(f.cam, w, h, f.fov, x + 2 * tx, y + 2 * ty);
+        const nx = r1[1] * r2[2] - r1[2] * r2[1], ny = r1[2] * r2[0] - r1[0] * r2[2], nz = r1[0] * r2[1] - r1[1] * r2[0], nl = Math.hypot(nx, ny, nz); if (!(nl > 1e-12)) continue;
+        const cy = Math.abs(ny) / nl; if (cy < (o.minTilt ?? 0.3) || cy > (o.maxTilt ?? 0.97)) continue;
+        hist[Math.floor((((Math.atan2(nx, -nz) / DEG) % 90 + 90) % 90) * 4) % 360] += coh * Math.min(Math.sqrt(tr / 25), 400);
+      }
+    }
+    return hist;
+  }
+  // The spots' line directions brought into one frame (each turned by its yaw) → {phi, strength (peak over
+  // the average, ≥ 1)} or null
+  function linesPhi(hists, poses) {
+    const H = new Float64Array(360); let any = false;
+    hists.forEach((h, k) => { if (!h) return; any = true; const sh = Math.round(poses[k].yaw / DEG * 4); for (let b = 0; b < 360; b++) H[(((b + sh) % 360) + 360) % 360] += h[b]; });
+    if (!any) return null;
+    const sm = new Float64Array(360); for (let b = 0; b < 360; b++) for (let j = -6; j <= 6; j++) sm[b] += H[(b + j + 360) % 360] * (7 - Math.abs(j));
+    let bi = 0; for (let b = 1; b < 360; b++) if (sm[b] > sm[bi]) bi = b;
+    let sx = 0, sy = 0, mean = 0; for (let b = 0; b < 360; b++) mean += sm[b] / 360;
+    for (let j = -8; j <= 8; j++) { const b = (bi + j + 360) % 360, a = (b + 0.5) * DEG; sx += H[b] * Math.cos(a); sy += H[b] * Math.sin(a); }
+    return mean > 0 ? { phi: ((Math.atan2(sy, sx) / 4) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2), strength: sm[bi] / mean } : null;
+  }
+  // evid: [{x, z, w, strong}] wall evidence (world); free: {g, W, H, x0, z0, cell} free-space raster;
+  // phi: main direction; spotXZ: spot positions (kept inside). → {poly, lines: {u, v}, energy} or null
+  // Model selection on top of the cut: a line that only adds corners without explaining enough free space
+  // or wall evidence is dropped (each corner costs o.cornerCost), and a side along which no wall was seen
+  // may move inward, so depth that wandered past the room's edge is trimmed rather than squared off.
+  function manhattanFit(evid, free, phi, spotXZ, o = {}) {
+    const c = Math.cos(phi), s = Math.sin(phi), toUV = (x, z) => [x * c + z * s, -x * s + z * c], toXZ = (u, v) => [u * c - v * s, u * s + v * c];
+    const P = evid.map(e => toUV(e.x, e.z)), dirs = localDirs(P, o.r ?? 0.3), tol = (o.angTol ?? 15) * DEG, lin = [[], []];
+    for (let i = 0; i < P.length; i++) { // 0: wall along u (v constant); 1: wall along v (u constant)
+      const a = dirs[i]; if (!Number.isFinite(a)) continue;
+      if (a < tol || a > Math.PI - tol) lin[0].push({ c: P[i][1], t: P[i][0], w: evid[i].w, strong: evid[i].strong });
+      else if (Math.abs(a - Math.PI / 2) < tol) lin[1].push({ c: P[i][0], t: P[i][1], w: evid[i].w, strong: evid[i].strong });
+    }
+    // the free space, in (u, v)
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity; const FP = [];
+    for (let k = 0; k < free.W * free.H; k++) if (free.g[k]) { const gx = k % free.W, gz = (k - gx) / free.W, q = toUV(free.x0 + (gx + 0.5) * free.cell, free.z0 + (gz + 0.5) * free.cell); FP.push(q[0], q[1]); u0 = Math.min(u0, q[0]); u1 = Math.max(u1, q[0]); v0 = Math.min(v0, q[1]); v1 = Math.max(v1, q[1]); }
+    if (!FP.length) return null;
+    const px = free.cell * free.cell, freeTot = FP.length / 2 * px;
+    // where along a line strong evidence lies
+    const alongOf = (arr, x) => { const t = []; for (const q of arr) if (q.strong && Math.abs(q.c - x) < 0.06) t.push(q.t); return Float64Array.from(t).sort(); };
+    // candidate walls: peaks of the evidence across each axis (2 cm bins, smoothed), 20 cm apart at least
+    const peaks = (arr, lo, hi) => {
+      const B = 0.02, nb = Math.ceil((hi - lo) / B) + 9, h = new Float64Array(nb), sm = new Float64Array(nb);
+      for (const p of arr) { const b = Math.floor((p.c - lo) / B) + 4; if (b >= 0 && b < nb) h[b] += p.w; }
+      for (let i = 0; i < nb; i++) for (let k = -4; k <= 4; k++) { const j = i + k; if (j >= 0 && j < nb) sm[i] += h[j] * Math.exp(-k * k / 4.5); }
+      const cand = []; for (let i = 1; i < nb - 1; i++) if (sm[i] >= sm[i - 1] && sm[i] > sm[i + 1] && sm[i] >= (o.minSupport ?? 6)) cand.push({ c: lo + (i - 4 + 0.5) * B, v: sm[i] });
+      cand.sort((a, b) => b.v - a.v);
+      const keep = []; for (const p of cand) if (keep.every(q => Math.abs(q.c - p.c) > (o.nms ?? 0.2))) keep.push(p);
+      return keep.slice(0, o.maxLines ?? 16).map(p => { let sw = 0, sx = 0; for (const q of arr) if (Math.abs(q.c - p.c) < 0.06) { sw += q.w; sx += q.w * q.c; } const cc = sw ? sx / sw : p.c; return { c: cc, t: alongOf(arr, cc) }; });
+    };
+    const M = o.margin ?? 0.5, Ul0 = peaks(lin[1], u0 - M, u1 + M), Vl0 = peaks(lin[0], v0 - M, v1 + M);
+    // the free space's extent closes the plan where no wall was found (those lines are always kept)
+    const bound = (L, x, arr) => { const near = L.find(l => Math.abs(l.c - x) <= 0.15); if (near) { near.keep = true; return; } L.push({ c: x, t: alongOf(arr, x), keep: true }); };
+    bound(Ul0, u0 - free.cell / 2, lin[1]); bound(Ul0, u1 + free.cell / 2, lin[1]); bound(Vl0, v0 - free.cell / 2, lin[0]); bound(Vl0, v1 + free.cell / 2, lin[0]);
+    const support = (L, a, b) => { // how much of [a, b] on line L a wall was seen along (5 cm steps, ±5 cm)
+      const T = L.t, n = Math.max(1, Math.round((b - a) / 0.05)); if (!T.length) return 0; let hit = 0;
+      for (let k = 0; k < n; k++) { const m = a + (k + 0.5) * (b - a) / n; let lo = 0, hi = T.length; while (lo < hi) { const md = (lo + hi) >> 1; if (T[md] < m - 0.05) lo = md + 1; else hi = md; } if (lo < T.length && T[lo] <= m + 0.05) hit++; }
+      return hit / n;
+    };
+    const lam = o.lambda ?? 0.5, kap = o.kappa ?? 0.03, gam = o.cornerCost ?? 0.15, bcost = (sup, len) => len * (kap + lam * (1 - sup) * (1 - sup));
+    const findIdx = (A, x) => { const L = A.length - 1; if (!(x >= A[0] && x < A[L])) return -1; let lo = 0, hi = L; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (A[m] <= x) lo = m; else hi = m; } return lo; };
+    const nb4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    // one arrangement of lines → labelling, outline and its total cost (mismatch with the free space in m²,
+    // outline cost, corners)
+    const solve = (Ul, Vl) => {
+      Ul = Ul.slice().sort((a, b) => a.c - b.c); Vl = Vl.slice().sort((a, b) => a.c - b.c);
+      const U = Ul.map(l => l.c), V = Vl.map(l => l.c), nu = U.length - 1, nv = V.length - 1, N = nu * nv; if (nu < 1 || nv < 1) return null;
+      const cnt = new Float64Array(N); let beyond = 0;
+      for (let k = 0; k < FP.length; k += 2) { const i = findIdx(U, FP[k]), j = findIdx(V, FP[k + 1]); if (i >= 0 && j >= 0) cnt[j * nu + i] += px; else beyond += px; }
+      const Din = new Float64Array(N), Dout = new Float64Array(N), E = [], cr = new Float64Array(N), ct = new Float64Array(N), cl = new Float64Array(nv), cb = new Float64Array(nu);
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const id = j * nu + i, A = (U[i + 1] - U[i]) * (V[j + 1] - V[j]), f = clamp(cnt[id] / A, 0, 1); Din[id] = (1 - f) * A; Dout[id] = f * A; }
+      const forced = new Uint8Array(N);
+      for (const [x, z] of spotXZ) { const q = toUV(x, z), i = findIdx(U, q[0]), j = findIdx(V, q[1]); if (i < 0 || j < 0) return null; forced[j * nu + i] = 1; }
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+        const id = j * nu + i; cr[id] = bcost(support(Ul[i + 1], V[j], V[j + 1]), V[j + 1] - V[j]); ct[id] = bcost(support(Vl[j + 1], U[i], U[i + 1]), U[i + 1] - U[i]);
+        if (i + 1 < nu) E.push([id, id + 1, cr[id], cr[id]]); if (j + 1 < nv) E.push([id, id + nu, ct[id], ct[id]]);
+      }
+      for (let j = 0; j < nv; j++) cl[j] = bcost(support(Ul[0], V[j], V[j + 1]), V[j + 1] - V[j]);
+      for (let i = 0; i < nu; i++) cb[i] = bcost(support(Vl[0], U[i], U[i + 1]), U[i + 1] - U[i]);
+      const ext = id => { const i = id % nu, j = (id - i) / nu; return (i === 0 ? cl[j] : 0) + (i === nu - 1 ? cr[id] : 0) + (j === 0 ? cb[i] : 0) + (j === nv - 1 ? ct[id] : 0); };
+      for (let id = 0; id < N; id++) E.push([N, id, forced[id] ? 1e9 : Dout[id], 0], [id, N + 1, Din[id] + ext(id), 0]);
+      const side = minCut(N + 2, N, N + 1, E);
+      // the part holding the first spot, holes filled
+      const q0 = toUV(spotXZ[0][0], spotXZ[0][1]), seed = findIdx(V, q0[1]) * nu + findIdx(U, q0[0]); if (!side[seed]) return null;
+      const comp = new Uint8Array(N), outer = new Uint8Array(N);
+      const flood = (mark, ok, seeds) => { const st = seeds.slice(); for (const k of st) mark[k] = 1; while (st.length) { const k = st.pop(), i = k % nu, j = (k - i) / nu; for (const [di, dj] of nb4) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nu || b >= nv) continue; const kk = b * nu + a; if (!mark[kk] && ok(kk)) { mark[kk] = 1; st.push(kk); } } } };
+      flood(comp, k => side[k] === 1, [seed]);
+      const border = []; for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) if ((i === 0 || j === 0 || i === nu - 1 || j === nv - 1) && !comp[j * nu + i]) border.push(j * nu + i);
+      flood(outer, k => !comp[k], border);
+      for (let k = 0; k < N; k++) if (!outer[k]) comp[k] = 1;
+      for (let k = 0; k < N; k++) if (forced[k] && !comp[k]) return null; // a spot left outside
+      // cost of this outline
+      const inC = (i, j) => i >= 0 && j >= 0 && i < nu && j < nv && comp[j * nu + i] === 1;
+      let energy = beyond;
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+        const id = j * nu + i, me = inC(i, j); energy += me ? Din[id] : Dout[id];
+        if (me !== inC(i + 1, j)) energy += cr[id]; if (me !== inC(i, j + 1)) energy += ct[id];
+        if (me && i === 0) energy += cl[j]; if (me && j === 0) energy += cb[i];
+      }
+      // its outline: cell edges with inside on the left, chained (turning left first at a pinch)
+      const out = new Map(), addE = (a, b, c2, d) => { const k = a * 1000 + b; let L = out.get(k); if (!L) out.set(k, L = []); L.push([c2, d]); };
+      for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) if (inC(i, j)) {
+        if (!inC(i, j - 1)) addE(i, j, i + 1, j); if (!inC(i + 1, j)) addE(i + 1, j, i + 1, j + 1);
+        if (!inC(i, j + 1)) addE(i + 1, j + 1, i, j + 1); if (!inC(i - 1, j)) addE(i, j + 1, i, j);
+      }
+      let best = null;
+      for (const [k0, L0] of out) while (L0.length) {
+        let ci = Math.floor(k0 / 1000), cj = k0 % 1000, [ni, nj] = L0.pop(); const loop = [[ci, cj]];
+        for (let guard = 0; guard < 4 * N + 8; guard++) {
+          const d = [ni - ci, nj - cj]; ci = ni; cj = nj; if (ci * 1000 + cj === k0) break;
+          loop.push([ci, cj]);
+          const L = out.get(ci * 1000 + cj); if (!L || !L.length) break;
+          let bk = 0, bs = -Infinity; L.forEach(([a, b], k) => { const e = [a - ci, b - cj], x = d[0] * e[1] - d[1] * e[0], sc = x > 0 ? 2 : x === 0 ? 1 : 0; if (sc > bs) { bs = sc; bk = k; } });
+          [ni, nj] = L.splice(bk, 1)[0];
+        }
+        const poly = []; for (let k = 0; k < loop.length; k++) { const a = loop[(k + loop.length - 1) % loop.length], b = loop[k], cc = loop[(k + 1) % loop.length]; if ((b[0] - a[0]) * (cc[1] - b[1]) - (b[1] - a[1]) * (cc[0] - b[0]) !== 0) poly.push([U[b[0]], V[b[1]]]); }
+        if (poly.length >= 4) { const A = polyArea(poly); if (!best || Math.abs(A) > Math.abs(best.A)) best = { poly, A }; }
+      }
+      if (!best) return null;
+      return { uv: best.A < 0 ? best.poly.reverse() : best.poly, energy, corners: best.poly.length, score: energy + gam * best.poly.length, U, V };
+    };
+    let Ul = Ul0, Vl = Vl0, cur = solve(Ul, Vl); if (!cur) return null;
+    // drop lines that do not pay for their corners
+    for (let pass = 0; pass < 4; pass++) {
+      let changed = false;
+      for (const [which, L] of [[0, Ul], [1, Vl]]) for (const l of L.slice()) {
+        if (l.keep) continue;
+        const L2 = L.filter(x => x !== l), r = which ? solve(Ul, L2) : solve(L2, Vl);
+        if (r && r.score < cur.score - 1e-6) { cur = r; if (which) Vl = L2; else Ul = L2; changed = true; }
+      }
+      if (!changed) break;
+    }
+    // a side along which no wall was seen may move inward (to where 3–25 % of the free space lies beyond)
+    if (o.trim !== false) for (const [which, end] of [[0, 0], [0, 1], [1, 0], [1, 1]]) {
+      const L = which ? Vl : Ul, sorted = L.slice().sort((a, b) => a.c - b.c), edge = end ? sorted[sorted.length - 1] : sorted[0];
+      const cols = which ? [Ul.map(l => l.c).sort((a, b) => a - b)] : [Vl.map(l => l.c).sort((a, b) => a - b)], span = cols[0];
+      if (support(edge, span[0], span[span.length - 1]) > (o.trimMaxSupport ?? 0.25)) continue;
+      const off = which ? 1 : 0, B = 0.02, lo = which ? v0 : u0, hi = which ? v1 : u1, nb = Math.ceil((hi - lo) / B) + 1, m = new Float64Array(nb);
+      for (let k = off; k < FP.length; k += 2) m[Math.min(nb - 1, Math.floor((FP[k] - lo) / B))]++;
+      const tot = FP.length / 2;
+      for (const q of o.trimQ || [0.03, 0.08, 0.15, 0.25]) {
+        let acc = 0, i;
+        if (!end) { i = 0; while (i < nb && acc + m[i] < q * tot) acc += m[i++]; } else { i = nb - 1; while (i >= 0 && acc + m[i] < q * tot) acc += m[i--]; i++; }
+        const x = lo + i * B, cand = { c: x, t: alongOf(lin[which ? 0 : 1], x), keep: true }, L2 = L.filter(l => l !== edge && (end ? l.c < x - 0.1 : l.c > x + 0.1)).concat([cand]);
+        const r = which ? solve(Ul, L2) : solve(L2, Vl);
+        if (r && r.score < cur.score - 1e-6) { cur = r; if (which) Vl = L2; else Ul = L2; }
+      }
+    }
+    return { poly: cur.uv.map(([u, v]) => toXZ(u, v)), lines: { u: cur.U, v: cur.V }, energy: +cur.energy.toFixed(3), corners: cur.corners, freeArea: freeTot };
+  }
+  // ---------------------------------------------------------------------------------------------
+  // Where walls meet floor and ceiling, from the photos themselves. Each wall plane's floor line and
+  // ceiling line are projected into every photo that sees them, and the image edge across each projected
+  // line (the brightness gradient perpendicular to it) is averaged along the wall. Each wall then slides
+  // along its normal (within ±o.range) to where its lines sit on the strongest edges — the baseboard, the
+  // paint line or moulding under the ceiling — and the ceiling height likewise. Furniture hides much of
+  // the floor line, so the ceiling line counts more, and a move needs a clear gain.
+  // Use: const ef = edgeFitSetup(room); for each photo: edgeFitPhoto(ef, photo, lum, w, h); edgeFitApply(ef)
+  // photo: {cam, pos, fov, sp: {x, z, yaw}} (spot frame, like the texturing); lum: luminance (w × h)
+  // ---------------------------------------------------------------------------------------------
+  function edgeFitSetup(room, o = {}) {
+    const P = room.poly, n = P.length, step = o.step ?? 0.01, range = o.range ?? 0.25, cRange = o.cRange ?? 0.2, offs = [], cOffs = [];
+    for (let d = -range; d <= range + 1e-9; d += step) offs.push(d);
+    for (let d = -cRange; d <= cRange + 1e-9; d += step) cOffs.push(d);
+    const sgn = polyArea(P) > 0 ? 1 : -1;
+    const walls = P.map((A, i) => {
+      const B = P[(i + 1) % n], L = Math.hypot(B[0] - A[0], B[1] - A[1]), dir = [(B[0] - A[0]) / L, (B[1] - A[1]) / L], out = [sgn * dir[1], -sgn * dir[0]], ts = [];
+      for (let t = 0.15; t <= L - 0.15 + 1e-9; t += 0.05) ts.push(t);
+      return { A, B, L, dir, out, ts, f: new Float64Array(offs.length), fn: new Float64Array(offs.length), c: new Float64Array(offs.length), cn: new Float64Array(offs.length) };
+    });
+    return { room, o, walls, offs, cOffs, cc: new Float64Array(cOffs.length), ccn: new Float64Array(cOffs.length) };
+  }
+  function edgeFitPhoto(ef, ph, Lum, w, h) {
+    const room = ef.room, sp = ph.sp, cy = Math.cos(sp.yaw), sy = Math.sin(sp.yaw), c = ph.cam, F = (Math.max(w, h) / 2) / Math.tan(ph.fov / 2), H = room.camHeight, C = room.height;
+    const proj = (x, y, z, out) => {
+      const dx = x - sp.x, dz = z - sp.z, lx = dx * cy + dz * sy, lz = -dx * sy + dz * cy, d0 = lx - ph.pos[0], d1 = y - H - ph.pos[1], d2 = lz - ph.pos[2];
+      const zc = d0 * c.fwd[0] + d1 * c.fwd[1] + d2 * c.fwd[2]; if (zc < 0.1) return false;
+      out[0] = w / 2 + F * (d0 * c.right[0] + d1 * c.right[1] + d2 * c.right[2]) / zc - 0.5; out[1] = h / 2 - F * (d0 * c.up[0] + d1 * c.up[1] + d2 * c.up[2]) / zc - 0.5; return true;
+    };
+    // the edge across the line from (x, y, z) towards +dir: gradient · normal of the projected line
+    const p1 = [0, 0], p2 = [0, 0];
+    const resp = (x, y, z, dir) => {
+      if (!proj(x, y, z, p1) || !proj(x + 0.05 * dir[0], y, z + 0.05 * dir[1], p2)) return -1;
+      const xi = Math.round(p1[0]), yi = Math.round(p1[1]); if (xi < 2 || yi < 2 || xi >= w - 2 || yi >= h - 2) return -1;
+      let tx = p2[0] - p1[0], ty = p2[1] - p1[1]; const tl = Math.hypot(tx, ty); if (!(tl > 1e-6)) return -1; tx /= tl; ty /= tl;
+      const k = yi * w + xi, L = Lum;
+      const gx = L[k - w + 1] + 2 * L[k + 1] + L[k + w + 1] - L[k - w - 1] - 2 * L[k - 1] - L[k + w - 1];
+      const gy = L[k + w - 1] + 2 * L[k + w] + L[k + w + 1] - L[k - w - 1] - 2 * L[k - w] - L[k - w + 1];
+      return Math.abs(-gx * ty + gy * tx);
+    };
+    // camera position in the room, for "is this point of the wall in view, not behind another wall?"
+    const camX = sp.x + ph.pos[0] * cy - ph.pos[2] * sy, camZ = sp.z + ph.pos[0] * sy + ph.pos[2] * cy, W = ef.walls;
+    const blocked = (x, z, self) => {
+      const ex = x - camX, ez = z - camZ;
+      for (let j = 0; j < W.length; j++) {
+        if (j === self) continue; const a = W[j].A, b = W[j].B, fx = b[0] - a[0], fz = b[1] - a[1], den = ex * fz - ez * fx; if (Math.abs(den) < 1e-12) continue;
+        const t = ((a[0] - camX) * fz - (a[1] - camZ) * fx) / den, u = ((a[0] - camX) * ez - (a[1] - camZ) * ex) / den;
+        if (t > 0.02 && t < 0.98 && u > 0 && u < 1) return true;
+      }
+      return false;
+    };
+    W.forEach((wl, i) => {
+      for (const t of wl.ts) {
+        const x0 = wl.A[0] + t * wl.dir[0], z0 = wl.A[1] + t * wl.dir[1];
+        if (blocked(x0, z0, i)) continue;
+        if (!proj(x0, 0, z0, p1) && !proj(x0, C, z0, p1)) continue;
+        if (ef.o.walls !== false) ef.offs.forEach((d, k) => {
+          const x = x0 + d * wl.out[0], z = z0 + d * wl.out[1];
+          const rf = resp(x, 0, z, wl.dir); if (rf >= 0) { wl.f[k] += rf; wl.fn[k]++; }
+          if (ef.o.ceilWeight !== 0) { const rc = resp(x, C, z, wl.dir); if (rc >= 0) { wl.c[k] += rc; wl.cn[k]++; } }
+        });
+        if (ef.o.ceil !== false) ef.cOffs.forEach((d, k) => { const rc = resp(x0, C + d, z0, wl.dir); if (rc >= 0) { ef.cc[k] += rc; ef.ccn[k]++; } });
+      }
+    });
+  }
+  // → {poly, height, moves: [m per wall], ceilMove} (unchanged where the edges are not clear)
+  function edgeFitApply(ef) {
+    const o = ef.o, wF = o.floorWeight ?? 1, wC = o.ceilWeight ?? 2, gain = o.minGain ?? 0.15, minN = o.minSamples ?? 40, mid = ef.offs.findIndex(d => Math.abs(d) < 1e-9);
+    const maxMove = o.maxMove ?? 0.3, sep = o.peakSep ?? 0.08, uniq = o.uniqueness ?? 1.12;
+    const moves = ef.walls.map(wl => {
+      if (o.walls === false) return 0;
+      const S = ef.offs.map((_, k) => { const f = wl.fn[k] >= minN ? wl.f[k] / wl.fn[k] : 0, c = wl.cn[k] >= minN ? wl.c[k] / wl.cn[k] : 0; return wF * f + wC * c; });
+      let bk = mid; S.forEach((v, k) => { if (v > S[bk]) bk = k; });
+      // the peak must be clear: inside the allowed move, a gain over where the wall is, and no rival peak
+      // (moulding has several parallel edges, a picture rail or a door head another) nearly as strong
+      if (bk === 0 || bk === S.length - 1 || Math.abs(ef.offs[bk]) > maxMove || !(S[bk] > (1 + gain) * S[mid])) return 0;
+      let rival = 0; for (let k = 1; k < S.length - 1; k++) if (Math.abs(ef.offs[k] - ef.offs[bk]) >= sep && S[k] >= S[k - 1] && S[k] >= S[k + 1]) rival = Math.max(rival, S[k]);
+      if (rival * uniq > S[bk]) return 0;
+      // sub-step: parabola through the peak
+      const a = S[bk - 1], b = S[bk], cc = S[bk + 1], den = a - 2 * b + cc, sub = den < 0 ? clamp(0.5 * (a - cc) / den, -0.5, 0.5) : 0;
+      return ef.offs[bk] + sub * (ef.offs[1] - ef.offs[0]);
+    });
+    // walls moved along their normals; corners where neighbouring walls meet again
+    const W = ef.walls, n = W.length, poly = [];
+    for (let i = 0; i < n; i++) {
+      const p = W[(i + n - 1) % n], q = W[i], P0 = [p.A[0] + moves[(i + n - 1) % n] * p.out[0], p.A[1] + moves[(i + n - 1) % n] * p.out[1]], Q0 = [q.A[0] + moves[i] * q.out[0], q.A[1] + moves[i] * q.out[1]];
+      const X = Math.abs(p.dir[0] * q.dir[1] - p.dir[1] * q.dir[0]) > 0.05 ? lineIntersect(P0, p.dir, Q0, q.dir) : null;
+      poly.push(X || Q0);
+    }
+    const Sc = ef.cOffs.map((_, k) => ef.ccn[k] >= minN ? ef.cc[k] / ef.ccn[k] : 0), cm = ef.cOffs.findIndex(d => Math.abs(d) < 1e-9);
+    let ck = cm; Sc.forEach((v, k) => { if (v > Sc[ck]) ck = k; });
+    const ceilMove = o.ceil !== false && ck > 0 && ck < Sc.length - 1 && Sc[ck] > (1 + gain) * Sc[cm] ? ef.cOffs[ck] : 0;
+    return { poly: selfIntersects(poly) ? ef.room.poly : poly, height: ef.room.height + ceilMove, moves, ceilMove };
+  }
   function floorPlan(spots, poses, o = {}) {
     const cell = o.cell || 0.04, bins = spots[0].prof.length;
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
@@ -1787,6 +2127,24 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       let b2 = 0; for (let k = 1; k < 90; k++) if (h2[k] > h2[b2]) b2 = k; phi = (b2 + 0.5) * DEG;
     }
     if (o.phi != null) phi = o.phi;
+    // straight walls: the outline from wall planes (above); the traced outline, squared, stays the fallback
+    if (o.snap !== false && o.planes !== false) {
+      const evid = [];
+      spots.forEach((s, k) => { const L = s.wallSightings || s.sightings; if (!L) return; const p = poses[k]; for (const w of L) { const q = rotY(w.d * Math.sin(w.az), -w.d * Math.cos(w.az), p.yaw); evid.push({ x: q[0] + p.x, z: q[1] + p.z, w: w.w, strong: 1 }); } });
+      // the main direction: from the lines in the photos when they are clear (no depth involved), else from
+      // the wall evidence, else the traced outline's straight stretches (above)
+      const lp = spots.some(s => s.lines) ? linesPhi(spots.map(s => s.lines), poses) : null, ep = o.phi == null ? evidencePhi(evid, o) : null;
+      // (both: the wall evidence refines the photos' direction when the two agree within a few degrees)
+      const dPhi = (a2, b2) => { let d = a2 - b2; d -= Math.round(d / (Math.PI / 2)) * (Math.PI / 2); return Math.abs(d); };
+      const lOk = lp && lp.strength >= (o.minLineStrength ?? 2.5);
+      const ph = o.phi != null ? null : lOk ? (ep != null && dPhi(ep, lp.phi) <= (o.phiAgree ?? 3) * DEG ? ep : lp.phi) : ep;
+      if (o.debugPhi) o.debugPhi({ ring: phi, evid: ep, lines: lp }); if (ph != null) phi = ph;
+      for (const [x, z] of ring) evid.push({ x, z, w: o.ringW ?? 0.3, strong: 0 });
+      const fit = manhattanFit(evid, { g: comp, W, H, x0, z0, cell }, phi, poses.map(p => [p.x, p.z]), o);
+      const rawA = Math.abs(polyArea(raw)), fitA = fit ? Math.abs(polyArea(fit.poly)) : 0;
+      if (fit && poses.every(p => pointInPoly(p.x, p.z, fit.poly)) && fitA > (o.minAreaRatio ?? 0.6) * rawA && fitA < (o.maxAreaRatio ?? 1.5) * rawA && !selfIntersects(fit.poly))
+        return { poly: fit.poly, raw, phi, snapped: true, planes: true, area: fitA, lines: fit.lines };
+    }
     let poly = o.snap === false ? raw : snapManhattan(raw, phi, o);
     if (o.snap !== false) {
       poly = mergeCollinear(poly);
@@ -1966,7 +2324,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   return {
     DEG, polyArea, pointInPoly, roomFaces, triangulate, DEMO_HOUSE, sceneHit, sceneColor, renderScene, mockDepth,
     calibrateSpot, parallaxInit, rayDistance, spotCloud, depthPanorama, spotStructure, spotFlatness, alignSpots, icp2d, rotY, fft2,
-    floorSamples, floorMatch, moveSamples, joinSamples, spotLayout, profileFrom, layoutProfiles, pooledCeil,
+    floorSamples, floorMatch, moveSamples, joinSamples, spotLayout, profileFrom, layoutProfiles, pooledCeil, lineHist, linesPhi, evidencePhi, manhattanFit, minCut, edgeFitSetup, edgeFitPhoto, edgeFitApply,
     floorPlan, snapManhattan, removeJogs, faceSources, paintFromPhoto, finishTexture, simplifyClosed, selfIntersects, spotPanorama, faceTextures3, faceTexture3, roomModel
   };
 });
@@ -2325,7 +2683,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Every capture and build step, timing, depth-engine attempt, warning and error is written to
   // localStorage the moment it happens, so the log survives iOS killing the tab (a page that runs out of
   // memory is reloaded) and can be copied, downloaded or shared afterwards. No photos go into the log.
-  const VERSION = 'v3.6', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
+  const VERSION = 'v3.7', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
   const LOG = [];
   const getJSON = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } };
   const setJSON = (key, v) => { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { } };
@@ -2922,12 +3280,14 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         // walls and ceiling from where floor, walls and ceiling meet (exact angles + phone height); the
         // depth-only structure fills directions where no such line was seen
         const lay = S3.spotLayout(frames, cal.cal, camH, { fallback: st, fallbackCeil: st.ceil }), floor = S3.floorSamples(frames, cal.cal, camH), flat = S3.spotFlatness(cloud, camH);
-        logLine('info', `spot ${k + 1}: ${cloud.n} depth points; ceiling ${lay.ceil ? lay.ceil.toFixed(2) + ' m' : 'not seen'} from ${lay.fulls.length} full-height wall lines (depth alone: ${st.ceil ? st.ceil.toFixed(2) + ' m' : '—'}); walls measured in ${Math.round(100 * lay.seen)}% of directions; ${floor.n} floor samples; wall distance varies ${Number.isFinite(flat.cv) ? Math.round(100 * flat.cv) + '%' : '?'} around the spot`);
+        // the directions of straight edges in this spot's photos (the room's main direction, its heading)
+        const lines = S3.lineHist(framesAll), ld = S3.linesPhi([lines], [{ yaw: 0 }]);
+        logLine('info', `spot ${k + 1}: ${cloud.n} depth points; ceiling ${lay.ceil ? lay.ceil.toFixed(2) + ' m' : 'not seen'} from ${lay.fulls.length} full-height wall lines (depth alone: ${st.ceil ? st.ceil.toFixed(2) + ' m' : '—'}); walls measured in ${Math.round(100 * lay.seen)}% of directions; ${floor.n} floor samples; wall distance varies ${Number.isFinite(flat.cv) ? Math.round(100 * flat.cv) + '%' : '?'} around the spot; straight edges in the photos run at ${ld ? (ld.phi / DEG).toFixed(1) + '° (clarity ' + ld.strength.toFixed(1) + ')' : '—'}`);
         // the wall lines decide where they were seen in enough directions; otherwise the depth profile stays
         const good = lay.seen >= 0.4;
         // depth that came out flat (a ring: every wall at the same distance) cannot place this spot's walls
         const isFlat = flat.cv < FLAT_CV && flat.dirs >= 24;
-        used.push({ frames, framesAll, cal, cloud, ceil: lay.ceil || st.ceil, prof: good ? lay.prof : st.prof, sightings: good ? lay.sightings : null, fulls: lay.fulls, fallbackProf: st.prof, floor, camHeight: camH, index: spots[k].index, photos: framesAll.length, flat: isFlat, flatCV: flat.cv });
+        used.push({ frames, framesAll, cal, cloud, ceil: lay.ceil || st.ceil, prof: good ? lay.prof : st.prof, sightings: good ? lay.sightings : null, wallSightings: lay.sightings, lines, fulls: lay.fulls, fallbackProf: st.prof, floor, camHeight: camH, index: spots[k].index, photos: framesAll.length, flat: isFlat, flatCV: flat.cv });
         dropPixels(spots[k].frames);
       }
       if (!used.length) throw Error('the floor could not be found in the photos aimed down, so the scale is unknown. Tilt further down (about 45°) so most of each floor photo shows floor, in good light');
@@ -2940,7 +3300,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by the floor they share' : 'tracing the walls');
       buildStep(used.length > 1 ? 'aligning spots' : 'single spot'); await nextFrame(); checkCancel();
       const poses = used.length > 1 ? S3.alignSpots(used, { yawSpan: 8 }) : [{ x: 0, z: 0, yaw: 0 }];
-      if (used.length > 1) logLine('info', 'spot poses', poses.map(p => Object.assign({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), yawDeg: +(p.yaw / DEG).toFixed(1), by: p.method }, p.floorScore != null ? { floorMatch: p.floorScore, floorCoarse: p.floorCoarse, nextBest: p.floorSecond, sharedFloorM2: p.floorOverlapM2, wallsSaid: p.wallsPose } : {})));
+      if (used.length > 1) logLine('info', 'spot poses', poses.map(p => Object.assign({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), yawDeg: +(p.yaw / DEG).toFixed(1), by: p.method }, p.linesYaw != null ? { headingFromLinesDeg: p.linesYaw } : {}, p.floorScore != null ? { floorMatch: p.floorScore, floorCoarse: p.floorCoarse, nextBest: p.floorSecond, sharedFloorM2: p.floorOverlapM2, wallsSaid: p.wallsPose } : {})));
       if (used.length > 1) { const pr = S3.layoutProfiles(used, poses); used.forEach((u, k) => { u.prof = pr[k]; }); }
       R.build = { spots3: used, poses, camH, arm, skipped, flatOut, scale: 1, ceilOverride: null, views: null };
       R.insideSpot = 0;
@@ -2993,9 +3353,33 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const R = ROOM, B = R.build, seq = ++R.rebuildSeq; if (!B) return false;
     const step = (name, data) => { if (logSteps) buildStep(name, data); };
     step('floor plan');
-    const plan = S3.floorPlan(B.spots3, B.poses, { snap: ui.straightWalls.checked });
-    if (logSteps) logLine('info', `floor plan: ${plan.poly.length} corners, ${plan.area ? plan.area.toFixed(2) : '?'} m², ${plan.snapped ? 'straightened' : 'as measured'}`);
+    let plan = S3.floorPlan(B.spots3, B.poses, { snap: ui.straightWalls.checked });
+    if (logSteps) logLine('info', `floor plan: ${plan.poly.length} corners, ${plan.area ? plan.area.toFixed(2) : '?'} m², ${plan.planes ? 'walls fitted as planes at right angles' : plan.snapped ? 'straightened' : 'as measured'}; main direction ${(plan.phi / DEG).toFixed(1)}°`);
     const height = B.ceilOverride != null ? B.ceilOverride / B.scale : S3.pooledCeil(B.spots3, 2.45);
+    // Walls slid onto the edges the photos show where they meet the floor and the ceiling (baseboard,
+    // moulding). Needs a ceiling height measured from walls seen floor to ceiling: the ceiling line then
+    // says how far each wall is, where furniture hides its foot. Done once per outline.
+    const fullsN = B.spots3.reduce((a, s) => a + (s.fulls ? s.fulls.length : 0), 0), cMeasured = S3.pooledCeil(B.spots3, 2.45);
+    if (plan.planes && fullsN >= 6) {
+      const key = plan.poly.map(p => p.map(v => v.toFixed(3)).join(',')).join(';');
+      if (!B.edgeFit || B.edgeFit.key !== key) {
+        step('fitting the walls to edges in the photos'); const te = performance.now();
+        const ef = S3.edgeFitSetup({ poly: plan.poly, height: cMeasured, camHeight: B.camH }, { ceil: false, range: 0.6, maxMove: 0.3, ceilWeight: 2 });
+        for (let k = 0; k < B.spots3.length; k++) {
+          if (prog) prog(0, `fitting the walls to the photos · spot ${k + 1}/${B.spots3.length}`);
+          await nextFrame(); if (seq !== R.rebuildSeq) return false; if (logSteps) checkCancel();
+          for (const f of (B.spots3[k].framesAll || B.spots3[k].frames)) {
+            const img = f.src ? (f.src.data || await framePixels(f.src)) : f.rgba; if (!img) continue;
+            const w = f.cw, h = f.ch, L = new Float32Array(w * h); for (let q = 0; q < w * h; q++) L[q] = 0.299 * img[4 * q] + 0.587 * img[4 * q + 1] + 0.114 * img[4 * q + 2];
+            S3.edgeFitPhoto(ef, { cam: f.cam, pos: f.pos, fov: f.fov, sp: B.poses[k] }, L, w, h);
+          }
+        }
+        const r = S3.edgeFitApply(ef);
+        B.edgeFit = { key, poly: r.poly, moves: r.moves };
+        if (logSteps) logLine('info', `walls fitted to the photo edges in ${Math.round(performance.now() - te)} ms: moved ${r.moves.map(m => Math.round(m * 100)).join(', ')} cm`);
+      }
+      plan = Object.assign({}, plan, { poly: B.edgeFit.poly, area: Math.abs(S3.polyArea(B.edgeFit.poly)), edgeMoves: B.edgeFit.moves });
+    }
     const base = { poly: plan.poly, height, camHeight: B.camH, spots: B.poses.map(p => ({ x: p.x, z: p.z, yaw: p.yaw })) };
     const PW = R.lowMem ? 1024 : 1536, TEX = R.lowMem ? 70 : 120, MAXS = R.lowMem ? 512 : 1024;
     if (!B.views) { // per-spot panoramas: the 360° view, and each photo's exposure relative to its neighbours
@@ -3168,7 +3552,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const by = { floor: 'its floor', 'wall lines': 'where its walls meet the floor and ceiling', walls: 'its walls' };
     const align = B.spots3.length > 1 ? ` Spots placed by matching ${B.poses.slice(1).map((p, i) => `${by[p.method] || 'its walls'}: spot ${B.spots3[i + 1].index + 1} at ${fmt(Math.hypot(p.x, p.z), 2)} m from spot ${B.spots3[0].index + 1}, turned ${fmt(p.yaw / DEG, 1)}°`).join('; ')}.` : '';
     R.diag = `Depth per photo from ${R.source === 'demo' ? 'the renderer with ±3% smooth error (stand-in for the AI)' : 'Depth Anything V2 (small) running on this device'}; every map calibrated against the floor ${fmt(B.camH * B.scale * 100, 0)} cm below the phone (floor found in ${floorP.join(' + ')} downward photos) and against the photos it overlaps.` + align +
-      ` The floor plan is the space each spot sees up to its walls (measured just under the ceiling, so furniture does not dent it)${R.plan && R.plan.snapped ? ', with walls straightened along the room’s main directions' : ''}. Furniture is painted onto the walls and floor rather than modelled.`;
+      (R.plan && R.plan.planes ? ` The walls are flat planes at right angles: they stand where the lines between wall and floor or ceiling were seen, along the room’s main direction (from the straight edges in the photos), and of those planes the outline is the set that best fits the space the spots saw.`
+        : ` The floor plan is the space each spot sees up to its walls (measured just under the ceiling, so furniture does not dent it)${R.plan && R.plan.snapped ? ', with walls straightened along the room’s main directions' : ''}.`) + ' Furniture is painted onto the walls and floor rather than modelled.';
     ui.diag.textContent = R.diag;
   }
 
