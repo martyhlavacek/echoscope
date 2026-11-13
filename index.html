@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="EchoScope">
 <link rel="icon" href="data:,">
-<title>EchoScope | AI room capture · v3.5</title>
+<title>EchoScope | AI room capture · v3.6</title>
 <style>
 :root{--bg:#06111d;--card:#0b1a2a;--card2:#0e2133;--line:#1d3a4f;--text:#e7f4fb;--muted:#8fb0c4;--accent:#3ce5c5;--accent2:#24c6db;--warn:#f4bd70;--err:#f08991;--bar-pad:12px}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
@@ -109,7 +109,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 </head>
 <body>
 <div class="app">
- <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.5</span></header>
+ <header class="top"><div class="logo">◉</div><div class="brand"><strong>ECHO<span>SCOPE</span></strong><small>Room capture · camera + on-device AI depth</small></div><span class="tag">v3.6</span></header>
  <div class="banner" id="crashBanner" hidden><b id="crashTitle">The last room build didn’t finish</b><p id="crashText"></p>
   <div class="tools"><button class="btn primary" id="crashRebuildBtn" type="button">Rebuild the saved capture</button><button class="btn" id="crashCopyBtn" type="button">Copy log</button><button class="btn" id="crashLogBtn" type="button">Download log</button><button class="btn" id="crashCapBtn" type="button">Download capture</button><button class="btn ghost" id="crashCloseBtn" type="button">Dismiss</button></div></div>
  <main class="layout">
@@ -146,7 +146,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   </section>
   <aside class="card pad stack" id="settings">
    <h2>Capture settings</h2>
-   <details class="box" open><summary>How to capture</summary><div class="inner"><ol class="steps"><li>Hold the phone in front of you, upright, <b>screen facing you</b>.</li><li>Tap Start, hold still, then <b>turn slowly on the spot</b> through a full circle. Each tick is a photo.</li><li>At the chime <b>tilt down about 45°</b> (the floor should reach the top half of the screen — not straight down at your feet) <b>and turn around again</b>, then <b>look up at the ceiling</b> in a few directions.</li><li><b>Walk 2–3 m</b>, tap <b>Next spot</b> and repeat (2–3 spots for most rooms), then tap <b>Build room</b>.</li><li>Pick spots with <b>open floor around you</b> — a metre or more from counters and furniture — and keep people out of the photos.</li></ol></div></details>
+   <details class="box" open><summary>How to capture</summary><div class="inner"><ol class="steps"><li>Hold the phone in front of you, upright, <b>screen facing you</b>.</li><li>Tap Start, hold still, then <b>turn slowly on the spot</b> through a full circle. Each tick is a photo.</li><li>At the chime <b>tilt down about 45°</b> (the floor should reach the top half of the screen — not straight down at your feet) <b>and turn around again</b>, then <b>look up at the ceiling</b> in a few directions.</li><li><b>Walk 2–3 m</b>, tap <b>Next spot</b> and repeat (2–3 spots for most rooms), then tap <b>Build room</b>.</li><li>Pick spots with <b>open floor around you</b> — a metre or more from counters, furniture and walls, so the photos show the floor meeting the walls in most directions — and keep people out of the photos.</li></ol></div></details>
    <div class="switch"><label for="voice">Spoken prompts<small>Ticks and chimes play either way</small></label><input class="toggle" type="checkbox" id="voice" checked></div>
    <details class="box"><summary>Camera</summary><div class="inner">
     <div class="field"><div class="head"><label for="camFov">Field of view</label><output id="camFovVal">68°</output></div><input type="range" min="40" max="100" step="1" value="68" id="camFov"><small>Across the long side of a photo (iPhone main camera ≈ 68°). Adjust if the stitched panorama shows doubled edges.</small></div>
@@ -902,9 +902,11 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const floorRows = []; let floorPhotos = 0, seed = 12345;
     const rnd = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
     frames.forEach((f, i) => {
-      // Only photos aimed clearly downward anchor the scale: in a level photo a sofa or table can hide the
-      // floor entirely, and then nothing contradicts taking its top for the floor.
-      if (f.cam.fwd[1] > -Math.sin(o.anchorPitch ?? 20 * DEG)) return;
+      // Photos tilted down by more than o.anchorPitch (8°) may anchor the scale: held "level", a phone points
+      // a little down and its photos still show floor along the bottom. A sofa or table top that hides the
+      // floor is caught by the tests below (nothing below the plane, a range of angles) and, for what slips
+      // through, by the robust weighting of the joint solve.
+      if (f.cam.fwd[1] > -Math.sin(o.anchorPitch ?? 8 * DEG)) return;
       const H = camHeight + f.pos[1], cand = [];
       for (let gy = 0; gy < GY * 2; gy++) for (let gx = 0; gx < GX; gx++) {
         const px = (gx + 0.5) / GX * f.dw - 0.5, py = (gy + 0.5) / (GY * 2) * f.dh - 0.5, r = RM.camRay(f.cam, f.dw, f.dh, f.fov, px, py);
@@ -933,11 +935,12 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         if (!best || e.score > best.score) best = Object.assign(e, { a, b });
       }
       // nothing can lie below the floor: a plane with points under it is a sofa seat or a table top
+      if (o.debugFloorTry) o.debugFloorTry(i, best, cand.length);
       if (!best || best.inl < Math.max(10, 0.35 * cand.length) || best.below > (o.maxBelow ?? 0.03) * cand.length) return;
       // a real floor spans a range of downward angles; over a narrow band a wall can mimic one
       const inl = cand.filter(c => { const q = best.a * c.ci[0] + best.b * c.ci[1]; if (!(q > 0)) return false; const t = 1 / q; return Math.abs(t * c.ry + H) < 0.05 + 0.03 * t; });
       let e0 = Infinity, e1 = -Infinity; for (const c of inl) { const e = Math.asin(clamp(-c.ry, -1, 1)); e0 = Math.min(e0, e); e1 = Math.max(e1, e); }
-      if (e1 - e0 < 12 * DEG) return;
+      if (e1 - e0 < 12 * DEG) { if (o.debugFloorTry) o.debugFloorTry(i, Object.assign({ narrow: (e1 - e0) / DEG }, best), cand.length); return; }
       // relative residuals (optionally balanced: o.floorWeight ≈ one overlapping pair per photo)
       const fw = o.floorWeight ?? 0, fstep = fw ? Math.max(1, Math.floor(inl.length / 80)) : 1, fk = inl.filter((_, k) => k % fstep === 0), fpw = fw ? Math.sqrt(fw / fk.length) : 1;
       for (const c of fk) floorRows.push({ i, ci: [c.ci[0] / c.rhs, c.ci[1] / c.rhs], rhs: 1, type: 0, pw: fpw });
@@ -988,7 +991,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       }
       return rows;
     };
-    const n = 2 * N, typeW = [1, o.overlapWeight ?? 1.5, o.initWeight ?? 4];
+    // row weights by kind: floor (the one thing measured against the phone height, so it outweighs the
+    // overlaps, which are satisfied just as well by flat depth), overlaps, priors
+    const n = 2 * N, typeW = [o.floorWeightAll ?? 5, o.overlapWeight ?? 1.5, o.initWeight ?? 4];
     // o.init[i] = {a, b, w}: a starting depth for photo i (from the parallax between neighbours): its
     // overlaps are matched through that depth from the start, and a soft pull towards it keeps a photo
     // whose links are weak from collapsing into "everything equally far"
@@ -1017,6 +1022,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       }
       return solveLinear(M, v, n);
     };
+    const fHub = o.floorHuber ?? 1.5;
     const reweight = (x, types) => {
       const res = rows.map(r => { let e = r.ci[0] * x[2 * r.i] + r.ci[1] * x[2 * r.i + 1] - r.rhs; if (r.type === 1) e += r.cj[0] * x[2 * r.j] + r.cj[1] * x[2 * r.j + 1]; return e; });
       for (const T of types) {
@@ -1025,7 +1031,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         rows.forEach((r, k) => {
           if (r.type !== T) return;
           const e = Math.abs(res[k]);
-          if (T === 0) { const u = e / (4.685 * sig); wt[k] = u < 1 ? (1 - u * u) ** 2 : 0; }   // Tukey: a sofa is not floor
+          if (T === 0 && fHub) { const c = fHub * sig; wt[k] = e <= c ? 1 : c / e; } // Huber: the floor is the one thing measured
+          else if (T === 0) { const u = e / (4.685 * sig); wt[k] = u < 1 ? (1 - u * u) ** 2 : 0; }   // Tukey (o.floorHuber: 0)
           else { const c = 1.5 * sig; wt[k] = e <= c ? 1 : c / e; }                              // Huber: never cut a link
         });
       }
@@ -1048,13 +1055,14 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     rows = floorRows.concat(overlapRows(x0), priorRows); wt = new Float64Array(rows.length).fill(1);
     let x = build(true, null);
     for (let it = 0; it < 2; it++) { reweight(x, [0, 1]); x = physical(build(true, null)); }
-    // Leave-one-out test of every floor anchor. A photo filled by a sofa seat or a bed, with no floor in
-    // view to contradict it, passes the per-photo test, but its "floor" then disagrees with what the other
-    // anchors and the photos around it say. Judged on pairs taken from (nearly) the same place — level and
-    // floor photos in the same direction, neighbours on the circle — which need no parallax correction.
-    // The worst offender is dropped, then the rest are tested again.
+    // Optional (o.anchorTest): leave-one-out test of every floor anchor. A photo filled by a sofa seat or a
+    // bed, with no floor in view to contradict it, passes the per-photo test, but its "floor" then disagrees
+    // with what the other anchors and the photos around it say. Judged on pairs taken from (nearly) the same
+    // place, which need no parallax correction; the worst offender is dropped, then the rest are tested
+    // again. Off by default: on real captures the overlaps it trusts are what flattens depth (every photo
+    // "equally far" agrees with every other), so it dropped good anchors far more often than sofa tops.
     const dropped = new Set();
-    if (o.anchorTest !== false) {
+    if (o.anchorTest === true) {
       const sep = (i, j) => Math.hypot(frames[i].pos[0] - frames[j].pos[0], frames[i].pos[1] - frames[j].pos[1], frames[i].pos[2] - frames[j].pos[2]);
       const keepRows = rows, keepWt = wt;
       rows = floorRows.concat(overlapRows(x0, (i, j) => sep(i, j) <= (o.nearBase ?? 0.08)), priorRows); wt = new Float64Array(rows.length).fill(1);
@@ -1200,6 +1208,18 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     return { ceil, prof: out };
   }
 
+  // How far the walls are in each direction (median of the depth points at 0.8–2 m height per 5°), and
+  // how much that varies: a real room seen from inside is never round (a square seen from its centre
+  // varies by 12 %); a spot whose depth calibration collapsed — every photo "equally far" — comes out as a
+  // ring. → {cv (spread / median), dirs (directions with points), med}
+  function spotFlatness(cloud, camHeight) {
+    const P = cloud.pos, bins = 72, per = Array.from({ length: bins }, () => []), step = Math.max(1, Math.floor(cloud.n / 60000));
+    for (let i = 0; i < cloud.n; i += step) { const y = P[3 * i + 1] + camHeight; if (y < 0.8 || y > 2.0) continue; const x = P[3 * i], z = P[3 * i + 2]; per[Math.floor((Math.atan2(x, -z) + Math.PI) / TAU * bins) % bins].push(Math.hypot(x, z)); }
+    const meds = per.filter(a => a.length >= 10).map(a => percentile(a, 0.5)); if (meds.length < 8) return { cv: NaN, dirs: meds.length, med: NaN };
+    const m = percentile(meds, 0.5), sd = Math.sqrt(meds.reduce((s, d) => s + (d - m) ** 2, 0) / meds.length);
+    return { cv: sd / m, dirs: meds.length, med: m };
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Room structure from where surfaces meet. Along vertical lines through each photo the calibrated
   // depth gives a profile of horizontal distance h and height y (from the camera). Whether a stretch is
@@ -1335,9 +1355,10 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       const bl = (b - l + bins) % bins, br = (b + r) % bins, th = a => (a + 0.5) / bins * TAU - Math.PI, u = a => [Math.sin(th(a)), -Math.cos(th(a))];
       const P1 = u(bl).map(v => v * prof[bl]), P2 = u(br).map(v => v * prof[br]), d = u(b), e = [P2[0] - P1[0], P2[1] - P1[1]];
       const den = d[0] * e[1] - d[1] * e[0], t = Math.abs(den) > 1e-9 ? (P1[0] * e[1] - P1[1] * e[0]) / den : NaN;
-      const chord = t > 0.2 && t < 1.5 * Math.max(prof[bl], prof[br]) ? t : (prof[bl] * r + prof[br] * l) / (l + r);
-      // a long gap may hide a corner the chord cuts off: the depth profile may push it out, a little
-      prof[b] = l + r - 1 > maxChord / 3 && fb ? clamp(fb[b] * scale, chord, chord * 1.25 + 0.1) : chord;
+      const chord = t > 0.2 && t < 1.5 * Math.max(prof[bl], prof[br]) ? t : (prof[bl] * r + prof[br] * l) / (l + r), gap = l + r - 1;
+      // a long gap may hide a corner the chord cuts off: the depth profile may push it out, a little. Across
+      // a very wide gap a chord means nothing (it can pass right by the spot): there the depth profile decides.
+      prof[b] = gap > maxChord && fb ? fb[b] * scale : gap > maxChord / 3 && fb ? clamp(fb[b] * scale, chord, chord * 1.25 + 0.1) : chord;
     }
     if (strong) for (let b = 0; b < bins; b++) if (!(measured[b] === 1 && own[b][3].length >= 2) && prof[b] > strong[b] * 1.06 + 0.08) prof[b] = strong[b];
     // narrow far spikes (open doorways, a glimpse into the next room) are clipped to the local median
@@ -1546,7 +1567,14 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 
   function alignSpots(spots, o = {}) {
     const N = o.grid || 256, cell = o.cell || 0.08, poses = [{ x: 0, z: 0, yaw: 0, method: 'reference' }];
-    const wp = spots.map(s => wallPoints(s.cloud, s.camHeight, s.ceil)), fl = spots.map(s => s.floor && s.floor.n > 2000 ? s.floor : null);
+    // Walls to match: the wall lines (where floor met wall, or wall met ceiling) when every spot has enough
+    // of them — their distances come from angles and the phone height, not from the depth scale, so two
+    // spots' lines agree even where their depth calibrations do not. Else the depth points at wall height
+    // for all (mixing the two kinds would compare unlike things). Spots carry sightings only when their
+    // lines covered enough directions to be trusted (o.sightings: false → always depth points).
+    const sightOf = s => s.sightings, fromSight = s => sightOf(s).map(w => [w.d * Math.sin(w.az), -w.d * Math.cos(w.az)]);
+    const useSight = o.sightings !== false && spots.every(s => sightOf(s) && sightOf(s).length >= (o.minSightings ?? 300));
+    const wp = spots.map(s => useSight ? fromSight(s) : wallPoints(s.cloud, s.camHeight, s.ceil)), fl = spots.map(s => s.floor && s.floor.n > 2000 ? s.floor : null);
     let target = wp[0].slice(); const ftarget = fl[0] ? [fl[0]] : [];
     for (let k = 1; k < spots.length; k++) {
       const A = occupancy(target, { x: 0, z: 0, yaw: 0 }, N, cell), Are = Float64Array.from(A), Aim = new Float64Array(N * N); fft2(Are, Aim, N, false);
@@ -1562,7 +1590,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           if (!best || v > best.v) best = { v, x: sx * cell, z: sz * cell, yaw: dy * DEG };
         }
       }
-      let pose = Object.assign(icp2d(wp[k], target, best, 30), { method: 'walls' });
+      let pose = Object.assign(icp2d(wp[k], target, best, 30), { method: useSight ? 'wall lines' : 'walls' });
       // The shared floor decides when its match is clear: a strong peak, well above any other place.
       if (fl[k] && ftarget.length && o.floor !== false) {
         const m = floorMatch(joinSamples(ftarget), fl[k], { yawSpan: o.yawSpan ?? 8 });
@@ -1937,7 +1965,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
 
   return {
     DEG, polyArea, pointInPoly, roomFaces, triangulate, DEMO_HOUSE, sceneHit, sceneColor, renderScene, mockDepth,
-    calibrateSpot, parallaxInit, rayDistance, spotCloud, depthPanorama, spotStructure, alignSpots, icp2d, rotY, fft2,
+    calibrateSpot, parallaxInit, rayDistance, spotCloud, depthPanorama, spotStructure, spotFlatness, alignSpots, icp2d, rotY, fft2,
     floorSamples, floorMatch, moveSamples, joinSamples, spotLayout, profileFrom, layoutProfiles, pooledCeil,
     floorPlan, snapManhattan, removeJogs, faceSources, paintFromPhoto, finishTexture, simplifyClosed, selfIntersects, spotPanorama, faceTextures3, faceTexture3, roomModel
   };
@@ -2258,6 +2286,9 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Level photos closer than this in heading share a depth map budget (0 = every photo gets one). Thinning
   // was tried: at 15° the floor-anchor check loses its close pairs and a hard spot's error grows ~4×.
   const DEPTH_LEVEL_GAP = 0;
+  // A spot whose wall distance varies less than this around it has flat depth (a real room is never round:
+  // a square seen from its centre varies 12 %; the simulated rooms 33–55 %; flat real spots 4–7 %)
+  const FLAT_CV = 0.08;
   const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const STANDALONE = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
 
@@ -2294,7 +2325,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Every capture and build step, timing, depth-engine attempt, warning and error is written to
   // localStorage the moment it happens, so the log survives iOS killing the tab (a page that runs out of
   // memory is reloaded) and can be copied, downloaded or shared afterwards. No photos go into the log.
-  const VERSION = 'v3.5', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
+  const VERSION = 'v3.6', LOG_KEY = 'echoscope:log', BUILD_KEY = 'echoscope:build', RECOVER_KEY = 'echoscope:recover';
   const LOG = [];
   const getJSON = key => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; } };
   const setJSON = (key, v) => { try { if (v == null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(v)); } catch (_) { } };
@@ -2876,7 +2907,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       }
       checkCancel();
       const camH = demo ? S3.DEMO_HOUSE.camHeight : camHeightSet(), arm = demo ? DEMO_ARM : armRadius();
-      const used = [], skipped = [];
+      let used = []; const skipped = [], flatOut = [];
       for (let k = 0; k < spots.length; k++) {
         setBuildProgress(P + (1 - P) * 0.4 * k / spots.length, `calibrating depth · spot ${k + 1}/${spots.length}`);
         buildStep(`calibrating spot ${k + 1}/${spots.length}`, { photos: spots[k].frames.length }); await nextFrame(); checkCancel();
@@ -2890,20 +2921,28 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         const cloud = S3.spotCloud(frames, cal.cal), st = S3.spotStructure(cloud, camH);
         // walls and ceiling from where floor, walls and ceiling meet (exact angles + phone height); the
         // depth-only structure fills directions where no such line was seen
-        const lay = S3.spotLayout(frames, cal.cal, camH, { fallback: st, fallbackCeil: st.ceil }), floor = S3.floorSamples(frames, cal.cal, camH);
-        logLine('info', `spot ${k + 1}: ${cloud.n} depth points; ceiling ${lay.ceil ? lay.ceil.toFixed(2) + ' m' : 'not seen'} from ${lay.fulls.length} full-height wall lines (depth alone: ${st.ceil ? st.ceil.toFixed(2) + ' m' : '—'}); walls measured in ${Math.round(100 * lay.seen)}% of directions; ${floor.n} floor samples`);
+        const lay = S3.spotLayout(frames, cal.cal, camH, { fallback: st, fallbackCeil: st.ceil }), floor = S3.floorSamples(frames, cal.cal, camH), flat = S3.spotFlatness(cloud, camH);
+        logLine('info', `spot ${k + 1}: ${cloud.n} depth points; ceiling ${lay.ceil ? lay.ceil.toFixed(2) + ' m' : 'not seen'} from ${lay.fulls.length} full-height wall lines (depth alone: ${st.ceil ? st.ceil.toFixed(2) + ' m' : '—'}); walls measured in ${Math.round(100 * lay.seen)}% of directions; ${floor.n} floor samples; wall distance varies ${Number.isFinite(flat.cv) ? Math.round(100 * flat.cv) + '%' : '?'} around the spot`);
         // the wall lines decide where they were seen in enough directions; otherwise the depth profile stays
         const good = lay.seen >= 0.4;
-        used.push({ frames, framesAll, cal, cloud, ceil: lay.ceil || st.ceil, prof: good ? lay.prof : st.prof, sightings: good ? lay.sightings : null, fulls: lay.fulls, fallbackProf: st.prof, floor, camHeight: camH, index: spots[k].index, photos: framesAll.length });
+        // depth that came out flat (a ring: every wall at the same distance) cannot place this spot's walls
+        const isFlat = flat.cv < FLAT_CV && flat.dirs >= 24;
+        used.push({ frames, framesAll, cal, cloud, ceil: lay.ceil || st.ceil, prof: good ? lay.prof : st.prof, sightings: good ? lay.sightings : null, fulls: lay.fulls, fallbackProf: st.prof, floor, camHeight: camH, index: spots[k].index, photos: framesAll.length, flat: isFlat, flatCV: flat.cv });
         dropPixels(spots[k].frames);
       }
       if (!used.length) throw Error('the floor could not be found in the photos aimed down, so the scale is unknown. Tilt further down (about 45°) so most of each floor photo shows floor, in good light');
+      // spots whose depth came out flat are left out while at least one spot has real depth: their walls
+      // and their place in the room would both be guesses
+      if (used.some(u => u.flat) && used.some(u => !u.flat)) {
+        for (const u of used) if (u.flat) { flatOut.push(u.index + 1); logLine('warn', `spot ${u.index + 1}: its depth came out flat (walls at about the same distance all around, varying only ${Math.round(100 * u.flatCV)}%) — left out`); }
+        used = used.filter(u => !u.flat);
+      }
       setBuildProgress(P + (1 - P) * 0.45, used.length > 1 ? 'aligning the spots by the floor they share' : 'tracing the walls');
       buildStep(used.length > 1 ? 'aligning spots' : 'single spot'); await nextFrame(); checkCancel();
       const poses = used.length > 1 ? S3.alignSpots(used, { yawSpan: 8 }) : [{ x: 0, z: 0, yaw: 0 }];
       if (used.length > 1) logLine('info', 'spot poses', poses.map(p => Object.assign({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), yawDeg: +(p.yaw / DEG).toFixed(1), by: p.method }, p.floorScore != null ? { floorMatch: p.floorScore, floorCoarse: p.floorCoarse, nextBest: p.floorSecond, sharedFloorM2: p.floorOverlapM2, wallsSaid: p.wallsPose } : {})));
       if (used.length > 1) { const pr = S3.layoutProfiles(used, poses); used.forEach((u, k) => { u.prof = pr[k]; }); }
-      R.build = { spots3: used, poses, camH, arm, skipped, scale: 1, ceilOverride: null, views: null };
+      R.build = { spots3: used, poses, camH, arm, skipped, flatOut, scale: 1, ceilOverride: null, views: null };
       R.insideSpot = 0;
       if (!await finishModel((f, sub) => setBuildProgress(P + (1 - P) * (0.5 + 0.5 * f), sub), true)) return;
       ok = true; R.failed = false;
@@ -3028,15 +3067,16 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     for (const [x, z] of r.poly) { const u = x * c - z * s, v = x * s + z * c; x0 = Math.min(x0, u); x1 = Math.max(x1, u); z0 = Math.min(z0, v); z1 = Math.max(z1, v); }
     return { width: x1 - x0, length: z1 - z0, height: r.height, area: Math.abs(S3.polyArea(r.poly)), corners: r.poly.length };
   }
-  function roomMessage() {
+  function roomMessage(prefix = '') {
     const R = ROOM, B = R.build, z = roomDims(), n = B.spots3.reduce((a, s) => a + s.photos, 0);
-    const skip = B.skipped.length ? ` Spot ${B.skipped.join(' & ')} was left out: the floor was not found in its downward photos.` : '';
+    const flat = B.flatOut || [], many = a => a.length > 1, skip = (B.skipped.length ? ` Spot${many(B.skipped) ? 's' : ''} ${B.skipped.join(' & ')} ${many(B.skipped) ? 'were' : 'was'} left out: the floor was not found in ${many(B.skipped) ? 'their' : 'its'} downward photos.` : '') +
+      (flat.length ? ` Spot${many(flat) ? 's' : ''} ${flat.join(' & ')} ${many(flat) ? 'were' : 'was'} left out: the depth there came out flat (every wall at about the same distance), so ${flat.length > 1 ? 'their' : 'its'} walls could not be placed. That happens next to a blank wall or with clutter close all around — stand where you can see the floor meet the walls in most directions.` : '');
     if (R.source === 'demo') {
       const H = S3.DEMO_HOUSE, tz = Math.abs(S3.polyArea(H.poly)), dx = H.spots[1][0] - H.spots[0][0], dz = H.spots[1][1] - H.spots[0][1], p = B.poses[1];
       setMessage(`Demo: a synthetic room rebuilt from ${B.spots3.length} spots and ${n} photos — ${fmt(z.area, 1)} m² with ${z.corners} corners (true room ${fmt(tz, 1)} m², ${H.poly.length} corners), ceiling ${fmt(z.height, 2)} m (true ${fmt(H.height, 2)} m)` +
         (p ? `, spot 2 placed ${fmt(p.x, 2)}, ${fmt(p.z, 2)} m from spot 1 (true ${fmt(dx, 2)}, ${fmt(dz, 2)}).` : '.') + ' Depth here comes from the renderer with ±3% error standing in for the AI.');
     } else {
-      setMessage(`Room built from ${B.spots3.length} spot${B.spots3.length > 1 ? 's' : ''} and ${n} photos: about ${fmt(z.area, 1)} m², ${z.corners} corners, ceiling ${fmt(z.height, 2)} m. The scale comes from your phone height (${fmt(B.camH * B.scale * 100, 0)} cm) — if everything is uniformly too big or small, correct it under Adjust room.` + skip, B.skipped.length ? 'warn' : 'info');
+      setMessage(prefix + `Room built from ${B.spots3.length} spot${B.spots3.length > 1 ? 's' : ''} and ${n} photos: about ${fmt(z.area, 1)} m², ${z.corners} corners, ceiling ${fmt(z.height, 2)} m. The scale comes from your phone height (${fmt(B.camH * B.scale * 100, 0)} cm) — if everything is uniformly too big or small, correct it under Adjust room.` + skip, B.skipped.length || flat.length ? 'warn' : 'info');
     }
   }
 
@@ -3125,7 +3165,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     ui.roomSummary.innerHTML = `<b>${fmt(z.area, 1)} m²</b> floor · about <b>${fmt(z.width, 2)} × ${fmt(z.length, 2)} m</b> · ceiling <b>${fmt(z.height, 2)} m</b><br>${z.corners} corners${R.plan && R.plan.snapped ? ' (straight walls)' : ''} · ` +
       `${B.spots3.length} spot${B.spots3.length > 1 ? 's' : ''}, ${n} photos · depth: ${R.engineUsed || '—'}`;
     setText('fitNote', `· phone ${fmt(B.camH * B.scale * 100, 0)} cm`);
-    const align = B.spots3.length > 1 ? ` Spots placed by matching their walls: ${B.poses.slice(1).map((p, i) => `spot ${i + 2} at ${fmt(Math.hypot(p.x, p.z), 2)} m from spot 1, turned ${fmt(p.yaw / DEG, 1)}°`).join('; ')}.` : '';
+    const by = { floor: 'its floor', 'wall lines': 'where its walls meet the floor and ceiling', walls: 'its walls' };
+    const align = B.spots3.length > 1 ? ` Spots placed by matching ${B.poses.slice(1).map((p, i) => `${by[p.method] || 'its walls'}: spot ${B.spots3[i + 1].index + 1} at ${fmt(Math.hypot(p.x, p.z), 2)} m from spot ${B.spots3[0].index + 1}, turned ${fmt(p.yaw / DEG, 1)}°`).join('; ')}.` : '';
     R.diag = `Depth per photo from ${R.source === 'demo' ? 'the renderer with ±3% smooth error (stand-in for the AI)' : 'Depth Anything V2 (small) running on this device'}; every map calibrated against the floor ${fmt(B.camH * B.scale * 100, 0)} cm below the phone (floor found in ${floorP.join(' + ')} downward photos) and against the photos it overlaps.` + align +
       ` The floor plan is the space each spot sees up to its walls (measured just under the ceiling, so furniture does not dent it)${R.plan && R.plan.snapped ? ', with walls straightened along the room’s main directions' : ''}. Furniture is painted onto the walls and floor rather than modelled.`;
     ui.diag.textContent = R.diag;
@@ -3257,7 +3298,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       logLine('info', `opened a raw capture: ${allFrames().length} photos in ${ROOM.spots.length} spot(s)`, { created: meta.created, app: meta.app, withDepth: allFrames().every(f => f.disp) });
       const needAI = allFrames().some(f => !f.disp);
       await roomBuild();
-      if (ROOM.room && !ROOM.failed) setMessage(`Opened a capture from ${new Date(meta.created).toLocaleString()} (${ROOM.spots.length} spot${ROOM.spots.length > 1 ? 's' : ''}, ${allFrames().length} photos${v1 ? ', made with the sonar version — rebuilt from its photos alone' : ''}) and rebuilt it${needAI ? ' using the AI depth model' : ' from its saved depth maps'}.`);
+      if (ROOM.room && !ROOM.failed) roomMessage(`Opened a capture from ${new Date(meta.created).toLocaleString()} (${ROOM.spots.length} spot${ROOM.spots.length > 1 ? 's' : ''}, ${allFrames().length} photos${v1 ? ', made with the sonar version — rebuilt from its photos alone' : ''}) and rebuilt it${needAI ? ' using the AI depth model' : ' from its saved depth maps'}. `);
     } catch (e) { console.error('Opening a capture failed', e); setMessage('Could not open that capture: ' + (e.message || e), 'error'); }
   }
   const facePngs = () => Promise.all(ROOM.tex.map(t => rgbaToPng(t).then(b => b.arrayBuffer())));
