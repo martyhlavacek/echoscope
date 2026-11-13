@@ -1561,9 +1561,31 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   }
   async function clearCache() { try { if (typeof caches !== 'undefined') return await caches.delete(CACHE); } catch (_) { } return false; }
 
+  // The runtime's WebAssembly memory, for the log (Safari has no other memory figure): the memories handed
+  // to or exported by any module instantiated after the first loadOrt. A wasm heap only ever grows.
+  const wasmMems = new Set();
+  function watchWasm() {
+    if (watchWasm.done || typeof WebAssembly === 'undefined') return; watchWasm.done = true;
+    const note = (imports, res) => {
+      try {
+        const inst = res && (res.instance || res), seen = [];
+        if (inst && inst.exports) seen.push(...Object.values(inst.exports));
+        if (imports && typeof imports === 'object') for (const ns of Object.values(imports)) if (ns && typeof ns === 'object') seen.push(...Object.values(ns));
+        for (const v of seen) if (v instanceof WebAssembly.Memory) wasmMems.add(v);
+      } catch (_) { }
+      return res;
+    };
+    for (const k of ['instantiate', 'instantiateStreaming']) {
+      const f = WebAssembly[k];
+      if (typeof f === 'function') WebAssembly[k] = function (src, imports, ...rest) { return f.call(this, src, imports, ...rest).then(r => note(imports, r)); };
+    }
+  }
+  function wasmHeapMB() { let b = 0; for (const m of wasmMems) try { b += m.buffer.byteLength; } catch (_) { } return Math.round(b / 1048576); }
+
   const ortCache = {};
   async function loadOrt(bundle, base) {
     const key = base + bundle;
+    watchWasm();
     if (!ortCache[key]) ortCache[key] = (async () => {
       const ort = await import(/* webpackIgnore: true */ base + bundle);
       const O = ort.default && ort.default.InferenceSession ? ort.default : ort;
@@ -1583,6 +1605,19 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
       return { f16: a.features.has('shader-f16'), vendor: i.vendor || '', architecture: i.architecture || '', maxBufferMB: Math.round((a.limits.maxBufferSize || 0) / 1048576), maxStorageMB: Math.round((a.limits.maxStorageBufferBindingSize || 0) / 1048576) };
     } catch (_) { return null; }
   }
+  // A GPUDevice of our own for the GPU sessions, with the features and limits ORT requests when it makes
+  // its own. A renewal destroys it, which frees everything the WebGPU side holds for it, whatever ORT keeps.
+  const GPU_LIMITS = ['maxBindGroups', 'maxComputeWorkgroupStorageSize', 'maxComputeWorkgroupsPerDimension', 'maxStorageBufferBindingSize', 'maxBufferSize', 'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupSizeX', 'maxComputeWorkgroupSizeY', 'maxComputeWorkgroupSizeZ'];
+  async function newGpuDevice() {
+    const a = await navigator.gpu.requestAdapter();
+    if (!a) throw Error('no GPU adapter');
+    const requiredFeatures = ['shader-f16', 'subgroups', 'timestamp-query'].filter(f => a.features.has(f)), requiredLimits = {};
+    for (const k of GPU_LIMITS) if (a.limits[k] !== undefined) requiredLimits[k] = a.limits[k];
+    const d = await a.requestDevice({ requiredFeatures, requiredLimits });
+    if (!('adapterInfo' in d) && a.info) try { d.adapterInfo = a.info; } catch (_) { }
+    return d;
+  }
+  const destroyDevice = d => { try { if (d) d.destroy(); } catch (_) { } };
 
   // --- the engine
   // o.prefer: 'auto' | 'gpu' | 'cpu'; o.onProgress({stage, loaded, total, cached, note}); o.ortBase / o.modelBase: overrides (tests, mirrors)
@@ -1613,7 +1648,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     log('depth engine: plans ' + plans.map(p => p.ep + '/' + p.model).join(' → '));
     let lastErr = null;
     for (const plan of plans) {
-      let stage = 'runtime', t0 = now();
+      let stage = 'runtime', t0 = now(), device = null, session = null;
       try {
         log(`depth engine: trying ${plan.ep}/${plan.model} (${plan.bundle})`);
         prog({ stage: 'runtime', note: plan.ep === 'webgpu' ? 'GPU runtime' : 'CPU runtime' });
@@ -1625,23 +1660,36 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         log(`depth engine: model ${(bytes.length / 1e6).toFixed(1)} MB ${pre ? '(downloaded while capturing)' : ''} in ${Math.round(now() - t0)} ms`);
         stage = 'session'; t0 = now();
         prog({ stage: 'session', note: plan.ep });
+        // On the GPU: our own device (newGpuDevice); if that fails, the one ORT makes for itself.
+        if (plan.ep === 'webgpu' && o.ownDevice !== false) {
+          try { device = await newGpuDevice(); } catch (e) { log('depth engine: own GPU device not available: ' + (e && e.message || e)); }
+        }
         // logSeverityLevel 3: errors only (ORT's routine "nodes assigned to the CPU" warning is noise)
-        const sessOpts = { executionProviders: [plan.ep], graphOptimizationLevel: 'all', logSeverityLevel: 3 };
-        let session = await ort.InferenceSession.create(bytes, sessOpts);
+        const sessOpts = () => ({ executionProviders: [device ? { name: 'webgpu', device } : plan.ep], graphOptimizationLevel: 'all', logSeverityLevel: 3 });
+        try { session = await ort.InferenceSession.create(bytes, sessOpts()); }
+        catch (e) {
+          if (!device) throw e;
+          log('depth engine: session on our own GPU device failed (' + (e && e.message || e) + '); using the runtime’s device');
+          destroyDevice(device); device = null;
+          session = await ort.InferenceSession.create(bytes, sessOpts());
+        }
         prefetched.delete(urls[0]);
         // On the GPU the session is renewed every few photos: on iPhone the page was killed after about two
-        // dozen GPU inferences while our own data stayed small, i.e. GPU-side memory grows per run. Releasing
-        // the session frees it; the model comes back from Cache Storage.
-        const recycleEvery = plan.ep === 'webgpu' ? (o.recycleEvery ?? 10) : 0, keepBytes = recycleEvery && !(await openCache()) ? bytes : null;
+        // dozen GPU inferences while our own data stayed small, i.e. memory grows per run outside our data.
+        // Renewal releases the session and destroys its device, then makes both again (the model comes back
+        // from Cache Storage).
+        const recycleEvery = plan.ep === 'webgpu' ? (o.recycleEvery ?? 8) : 0, keepBytes = recycleEvery && !(await openCache()) ? bytes : null;
         let runs = 0, renewals = 0;
         const renew = async () => {
-          const tr = now();
+          const tr = now(), own = !!device;
           try { await session.release(); } catch (_) { }
-          session = null; await new Promise(r => setTimeout(r, 40));
-          session = await ort.InferenceSession.create(keepBytes || await loadModel(urls, null), sessOpts); renewals++;
-          log(`depth engine: GPU session renewed after ${runs} runs in ${Math.round(now() - tr)} ms`);
+          session = null; destroyDevice(device); device = null;
+          await new Promise(r => setTimeout(r, 40));
+          if (own) { try { device = await newGpuDevice(); } catch (e) { log('depth engine: new GPU device failed: ' + (e && e.message || e)); } }
+          session = await ort.InferenceSession.create(keepBytes || await loadModel(urls, null), sessOpts()); renewals++;
+          log(`depth engine: GPU ${own ? 'device and session' : 'session'} renewed after ${runs} runs in ${Math.round(now() - tr)} ms`, { wasmMB: wasmHeapMB() });
         };
-        log(`depth engine: session created in ${Math.round(now() - t0)} ms`, { inputs: session.inputNames, outputs: session.outputNames });
+        log(`depth engine: session created in ${Math.round(now() - t0)} ms${device ? ' on our own GPU device' : ''}`, { inputs: session.inputNames, outputs: session.outputNames, wasmMB: wasmHeapMB() });
         stage = 'probe'; t0 = now();
         const inName = session.inputNames[0], outName = session.outputNames[0];
         const meta = (session.inputMetadata || []).find(m => m.name === inName) || {};
@@ -1662,10 +1710,11 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           return resampleMap(map, ow, oh, outW || ow, outH || oh);
         };
         const engine = {
-          kind: plan.ep, model: plan.model, inputLong: o.inputLong || plan.L, half, recycleEvery, get renewals() { return renewals; },
+          kind: plan.ep, model: plan.model, inputLong: o.inputLong || plan.L, half, recycleEvery,
+          get renewals() { return renewals; }, get gpuDevice() { return device; },
           // Serialised: one inference at a time.
           infer(img, outW, outH) { const p = busy.then(() => run(img, outW, outH)); busy = p.catch(() => { }); return p; },
-          async dispose() { try { if (session) await session.release(); } catch (_) { } session = null; }
+          async dispose() { try { if (session) await session.release(); } catch (_) { } session = null; destroyDevice(device); device = null; }
         };
         // smoke test: a tiny grey image must give a finite map, else fall through to the next plan
         const probe = await engine.infer({ data: new Uint8ClampedArray(56 * 42 * 4).fill(128), w: 42, h: 56 }, 6, 8);
@@ -1675,6 +1724,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
         return engine;
       } catch (e) {
         lastErr = e;
+        try { if (session) await session.release(); } catch (_) { }
+        session = null; destroyDevice(device); device = null;
         log(`depth engine: ${plan.ep}/${plan.model} failed at ${stage}: ${e && e.message || e}`, e && e.stack ? String(e.stack).split('\n').slice(0, 5).join(' | ') : undefined);
         console.warn('Depth engine plan failed', plan, e);
       }
@@ -1684,7 +1735,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
   // Stand-in engine: fn(img, outW, outH) → Float32Array (the demo uses the renderer's true depth).
   function mockEngine(fn) { return { kind: 'mock', model: 'synthetic', infer: async (img, w, h) => fn(img, w, h), dispose() { } }; }
 
-  return { createEngine, prefetch, mockEngine, isCached, clearCache, modelUrls, inputSize, resizeRGBA, resampleMap, toHalf, fromHalf, MODELS, ORT_BASE, ORT_VERSION, HF_COMMIT };
+  return { createEngine, prefetch, mockEngine, isCached, clearCache, modelUrls, inputSize, resizeRGBA, resampleMap, toHalf, fromHalf, wasmHeapMB, MODELS, ORT_BASE, ORT_VERSION, HF_COMMIT };
 });
 </script>
 <script>
@@ -2207,7 +2258,8 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
     const R = ROOM; let b = 0;
     for (const f of allFrames()) b += (f.data ? f.data.byteLength : 0) + (f.disp ? f.disp.byteLength : 0) + (f.jpeg ? f.jpeg.byteLength : 0);
     const B = R.build; if (B) { for (const sp of B.spots3) if (sp.cloud) b += sp.cloud.pos.byteLength + sp.cloud.col.byteLength; if (B.views) for (const v of B.views) if (v.pano) b += v.pano.data.byteLength; }
-    const o = { ourDataMB: Math.round(b / 1e6) };
+    const o = { ourDataMB: Math.round(b / 1e6) }, w = DE.wasmHeapMB ? DE.wasmHeapMB() : 0;
+    if (w) o.wasmMB = w; // the depth runtime's heap (it only grows)
     if (performance.memory) o.jsHeapMB = Math.round(performance.memory.usedJSHeapSize / 1e6);
     return o;
   }
@@ -2273,7 +2325,7 @@ html.capturing,html.capturing body{overflow:hidden;height:100%;overscroll-behavi
           if (i === 0 || i % 10 === 0) setBuildState({ state: 'running', step: `depth map ${i + 1}/${todo.length}`, source: R.source, engine: R.engineUsed, frames: allFrames().length, mem: memMB() });
           await nextFrame();
           f.disp = await Promise.race([eng.infer({ data: f.data, w: f.w, h: f.h, frame: f }, dw, dh), cancelled]); f.dw = dw; f.dh = dh;
-          if (i < 3 || (i + 1) % 10 === 0 || i === todo.length - 1) logLine('info', `depth map ${i + 1}/${todo.length}: ${Math.round(performance.now() - ti)} ms`, i === todo.length - 1 ? memMB() : undefined, i < 3);
+          if (i < 3 || (i + 1) % 10 === 0 || i === todo.length - 1) logLine('info', `depth map ${i + 1}/${todo.length}: ${Math.round(performance.now() - ti)} ms`, i >= 3 ? memMB() : undefined, i < 3);
         }
         logLine('info', `depth maps done: ${todo.length} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
         if (!demo) {

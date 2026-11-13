@@ -51,7 +51,7 @@ Tip: on iPhone, **Share → Add to Home Screen** runs EchoScope full screen with
   - **Download capture**.
 - **Lighter settings for the next build.** If the last build crashed, the next one uses settings that need less memory. If it crashed while the GPU was computing depth, the next build uses the CPU instead.
 - **Cancel build.** During a build, **Copy log** and **Cancel build** stay on screen. A step that takes unusually long is noted in the log.
-- **GPU memory.** The first iPhone log showed the GPU depth engine growing in memory with every photo until iOS killed the page (after about two dozen photos). Since v3.3, the GPU engine is restarted every 10 photos, which frees that memory, and it works on slightly smaller images. The automatic switch to the CPU after a crash stays as the safety net.
+- **GPU memory.** The first iPhone log showed the GPU depth engine growing in memory with every photo until iOS killed the page (after about two dozen photos). Since v3.3, the depth engine runs on a GPU device of its own and replaces the device and its session every 8 photos, which frees everything the GPU side holds; it also works on slightly smaller images, and the log records the engine's memory every 10 photos. The automatic switch to the CPU after a crash stays as the safety net.
 
 ## How it works
 - **Depth per photo.** [Depth Anything V2 Small](https://huggingface.co/onnx-community/depth-anything-v2-small) (Apache-2.0) runs in the page through [onnxruntime-web](https://onnxruntime.ai) on WebGPU (half precision), or WebAssembly (8-bit) when the GPU can't run it. For each photo it gives relative depth: which things are nearer and farther, but not by how much in metres. That unknown scale and offset is different for every photo.
